@@ -167,30 +167,6 @@ export const StarfieldCanvas = ({ reducedMotion, showConstellation, onStarSelect
 
       drawMeteor(t);
 
-      // Orion
-      const { ox, oy, size } = orionRegion();
-      const pos = (k) => ({
-        x: ox + ORION.stars[k].x * size + px,
-        y: oy + ORION.stars[k].y * size + py,
-      });
-
-      for (const key of Object.keys(ORION.stars)) {
-        const st = ORION.stars[key];
-        const p = pos(key);
-        positions.current[key] = { x: p.x, y: p.y, ...ORION_LORE[key] };
-        const r = Math.max(1.3, (3.2 - st.m) * 1.1 + 1.3);
-        const tw = reducedMotion ? 0 : Math.sin(t * 0.0015 + st.x * 10) * 0.15;
-        // glow
-        const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 5);
-        grad.addColorStop(0, "rgba(255,240,210,0.5)");
-        grad.addColorStop(1, "rgba(255,240,210,0)");
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, r * 5, 0, Math.PI * 2);
-        ctx.fill();
-        drawStar(p.x, p.y, r, 0.95 + tw, st.c || "rgba(255,250,240,0.98)");
-      }
-
       if (!reducedMotion) raf.current = requestAnimationFrame(render);
     };
 
@@ -202,40 +178,8 @@ export const StarfieldCanvas = ({ reducedMotion, showConstellation, onStarSelect
       const cy = (e.clientY / h) * 2 - 1;
       pointer.current.tx = cx;
       pointer.current.ty = cy;
-      // hover cursor near a star
-      const rect = canvas.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-      let near = false;
-      for (const k of Object.keys(positions.current)) {
-        const p = positions.current[k];
-        if (Math.hypot(mx - p.x, my - p.y) < 24) {
-          near = true;
-          break;
-        }
-      }
-      canvas.style.cursor = near ? "pointer" : "default";
     };
     if (!reducedMotion) window.addEventListener("mousemove", onMove);
-
-    const onClick = (e) => {
-      if (!onStarSelect) return;
-      const rect = canvas.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-      let best = null;
-      let bestD = 34;
-      for (const k of Object.keys(positions.current)) {
-        const p = positions.current[k];
-        const d = Math.hypot(mx - p.x, my - p.y);
-        if (d < bestD) {
-          bestD = d;
-          best = p;
-        }
-      }
-      if (best) onStarSelect({ name: best.name, lore: best.lore });
-    };
-    canvas.addEventListener("click", onClick);
 
     if (reducedMotion) {
       render(0);
@@ -246,7 +190,6 @@ export const StarfieldCanvas = ({ reducedMotion, showConstellation, onStarSelect
     return () => {
       window.removeEventListener("resize", resize);
       window.removeEventListener("mousemove", onMove);
-      canvas.removeEventListener("click", onClick);
       if (raf.current) cancelAnimationFrame(raf.current);
     };
   }, [reducedMotion, showConstellation, onStarSelect]);

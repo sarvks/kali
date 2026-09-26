@@ -566,8 +566,7 @@ function App() {
                     आगच्छ
                   </span>
                   Ask, and I will answer in Sanskrit — with a quieter word
-                  beneath it. Speak of time, fear, or what you must release. Tap
-                  a star to learn its name.
+                  beneath it. Speak of time, fear, or what you must release.
                 </p>
                 {dailyLetter && (
                   <button

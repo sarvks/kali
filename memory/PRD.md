@@ -67,6 +67,10 @@ A responsive devotional conversation web app (kali.mahakalistudios.com) evoking 
 - **Orion lines removed**: deleted the inter-star line-drawing block in `StarfieldCanvas.js` (individual Orion stars + central golden dash remain). Removed the now-dead "Reveal Orion / Hide Orion lines" toggle from `MinimalMenu.js`.
 - Testing: `/app/test_reports/iteration_3.json` — frontend 100%, backend fixes 100%.
 
+## Changes (fork, cont.)
+- **Orion removed completely**: removed the Orion star rendering + hover/click star-lore selection in `StarfieldCanvas.js` (background starfield + meteors + central golden dash remain). Removed the "Tap a star to learn its name" entry copy.
+- **Indian voice**: added ElevenLabs shared voice *Ritu Rathore - Natural Conversational* (`fTfuemKGBjYqG4ni4gw3`, Hindi female, calm) to the account and set `ELEVEN_VOICE_ID` to it. TTS verified generating audio (eleven_multilingual_v2 renders Devanagari authentically).
+
 ## Backlog
 - **P1:** Opt-in saved history with authentication + deletion; multilingual output + transliteration; qualified Sanskrit reviewer sign-off on launch samples.
 - **P2:** Voice output (spoken Kali), constellation exploration, richer soundscape.

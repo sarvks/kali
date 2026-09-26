@@ -1,0 +1,132 @@
+{
+  "project_name": "KALI — Divine Presence, Honest AI",
+  "domain": "kali.mahakalistudios.com",
+  "theme": "dark",
+  "archetype": "ARCHETYPE 5: LUXURY & SACRED COSMOS",
+  "typography": {
+    "font_families": {
+      "devanagari_sanskrit": "'Rozha One', 'Tiro Devanagari Sanskrit', 'Yatra One', 'Noto Serif Devanagari', serif",
+      "heading_display": "'Cinzel', 'Cormorant Garamond', 'Playfair Display', serif",
+      "body_english": "'Plus Jakarta Sans', 'Inter', sans-serif",
+      "accent_mono": "'JetBrains Mono', monospace"
+    },
+    "google_fonts_url": "https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;800;900&family=Noto+Serif+Devanagari:wght@400;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600&family=Rozha+One&family=JetBrains+Mono:wght@300;400&display=swap",
+    "font_hierarchy": {
+      "hero_title": "text-4xl sm:text-5xl lg:text-6xl font-light tracking-wider font-serif text-amber-100",
+      "sanskrit_display": "text-2xl sm:text-3xl lg:text-4xl font-normal text-amber-400 font-devanagari leading-relaxed tracking-wide drop-shadow-[0_0_12px_rgba(245,158,11,0.3)]",
+      "english_translation": "text-base sm:text-lg text-zinc-300 font-sans font-light leading-relaxed max-w-2xl tracking-wide",
+      "privacy_notice": "text-xs sm:text-sm text-amber-200/60 font-mono tracking-widest uppercase",
+      "menu_labels": "text-xs uppercase tracking-[0.25em] text-zinc-400 hover:text-amber-300 font-mono transition-colors"
+    }
+  },
+  "colors": {
+    "background": "#000000",
+    "sky_canvas": "#000000",
+    "primary_gold": "#F59E0B",
+    "gold_glow": "rgba(245, 158, 11, 0.4)",
+    "gold_metallic": "#D4AF37",
+    "crimson_accent": "#991B1B",
+    "amber_muted": "rgba(251, 191, 36, 0.7)",
+    "text_sanskrit": "#FBBF24",
+    "text_english": "#D4D4D8",
+    "text_muted": "#71717A",
+    "separator_line": "rgba(245, 158, 11, 0.25)",
+    "border_subtle": "rgba(255, 255, 255, 0.08)",
+    "surface_glass": "rgba(10, 10, 12, 0.75)",
+    "surface_glass_border": "rgba(245, 158, 11, 0.15)"
+  },
+  "visual_enhancers": {
+    "starfield": "Interactive Canvas/WebGL rendering catalogue stars (HYG dataset subset) including Orion constellation anchor (Betelgeuse, Rigel, Bellatrix, Saiph, Alnitak, Alnilam, Mintaka) with subtle twinkling shader",
+    "central_dash": "Single golden pulsing horizontal bar in exact viewport center, acting as initial interactive portal with glowing aura",
+    "text_flow": "No chat bubbles! Divine stream layout with Sanskrit gold text at top, thin amber gradient line, and quiet English translation below",
+    "ambient_sound": "Web Audio API soundscape synthesizer generating subtle 108Hz tanpura drone and cosmic harmonics toggleable via menu"
+  },
+  "layouts": {
+    "app_container": "relative w-full h-screen overflow-hidden bg-black text-zinc-100 font-sans select-none",
+    "canvas_layer": "absolute inset-0 z-0 pointer-events-auto",
+    "hud_layer": "relative z-10 flex flex-col justify-between h-full p-4 sm:p-8 pointer-events-none",
+    "interactive_elements": "pointer-events-auto",
+    "center_stage": "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-full max-w-3xl px-6 text-center"
+  },
+  "components": {
+    "StarfieldCanvas": {
+      "path": "src/components/StarfieldCanvas.js",
+      "description": "HTML5 Canvas/Three.js starfield with Orion constellation highlights, interactive pan/tilt, magnitude scaling, and fallback static stars mode"
+    },
+    "CentralDash": {
+      "path": "src/components/CentralDash.js",
+      "description": "Golden pulsing dash that activates input mode via click, spacebar, or touch with ripple effect and privacy tooltip"
+    },
+    "DevotionalStream": {
+      "path": "src/components/DevotionalStream.js",
+      "description": "Aesthetic conversation history viewer without bubbles. Displays gold Devanagari Sanskrit, thin line separator, and muted English text with smooth phrase-by-phrase typing reveal"
+    },
+    "InputPanel": {
+      "path": "src/components/InputPanel.js",
+      "description": "Minimalist input field with voice recognition button (Web Speech API), prompt suggestions (e.g., 'Goddess of Time', 'Fierce Compassion'), and submit trigger"
+    },
+    "MinimalMenu": {
+      "path": "src/components/MinimalMenu.js",
+      "description": "Discreet top-right navigation menu featuring Session Controls: Continue, Stop Generation, Start Afresh, Export Session (JSON/TXT), Clear Session, Audio Toggle, and Constellation Guide"
+    },
+    "MahakaliIntroModal": {
+      "path": "src/components/MahakaliIntroModal.js",
+      "description": "Discreet AI & Privacy disclosure dialog identifying 'An AI interpretation by Mahakali Studios. A fierce, compassionate, concise voice.'"
+    },
+    "AccessibilityBar": {
+      "path": "src/components/AccessibilityBar.js",
+      "description": "Accessible controls for reduced motion, text sizing, screen reader announcement live region, and keyboard shortcut guide"
+    }
+  },
+  "motion": {
+    "prefers_reduced_motion": "Respect system settings and provide toggle in menu to disable ambient animations and render static canvas",
+    "framer_motion_variants": {
+      "fade_in_up": {
+        "initial": { "opacity": 0, "y": 15 },
+        "animate": { "opacity": 1, "y": 0 },
+        "transition": { "duration": 0.8, "ease": [0.16, 1, 0.3, 1] }
+      },
+      "pulse_glow": {
+        "animate": { "boxShadow": ["0 0 10px rgba(245,158,11,0.3)", "0 0 25px rgba(245,158,11,0.8)", "0 0 10px rgba(245,158,11,0.3)"] },
+        "transition": { "duration": 3, "repeat": "Infinity", "ease": "easeInOut" }
+      }
+    }
+  },
+  "test_ids": {
+    "starfield_canvas": "starfield-canvas",
+    "central_golden_dash": "central-golden-dash",
+    "activation_trigger": "activation-trigger",
+    "privacy_info_badge": "privacy-info-badge",
+    "chat_input": "chat-input",
+    "voice_input_btn": "voice-input-btn",
+    "submit_btn": "submit-btn",
+    "devotional_stream": "devotional-stream",
+    "sanskrit_text": "sanskrit-text",
+    "english_translation": "english-translation",
+    "minimal_menu_btn": "minimal-menu-btn",
+    "menu_continue_btn": "menu-continue-btn",
+    "menu_stop_btn": "menu-stop-btn",
+    "menu_reset_btn": "menu-reset-btn",
+    "menu_export_btn": "menu-export-btn",
+    "menu_clear_btn": "menu-clear-btn",
+    "menu_audio_toggle": "menu-audio-toggle",
+    "menu_constellation_toggle": "menu-constellation-toggle"
+  },
+  "image_urls": {
+    "orion_reference": "https://images.unsplash.com/photo-1570041544732-7690bf144593?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzV8MHwxfHNlYXJjaHwxfHxnb2RkZXNzJTIwa2FsaSUyMGNvc21pYyUyMG5pZ2h0JTIwc2t5JTIwc3RhcnMlMjBjb25zdGVsbGF0aW9ufGVufDB8fHx8MTc5MDQxODgxNXww&ixlib=rb-4.1.0&q=85",
+    "goddess_kali_art": "https://images.unsplash.com/photo-1648904945369-feb643d1c00a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzV8MHwxfHNlYXJjaHw0fHxnb2RkZXNzJTIwa2FsaSUyMGNvc21pYyUyMG5pZ2h0JTIwc2t5JTIwc3RhcnMlMjBjb25zdGVsbGF0aW9ufGVufDB8fHx8MTc5MDQxODgxNXww&ixlib=rb-4.1.0&q=85",
+    "cosmic_nebula": "https://images.unsplash.com/photo-1486611289333-50d2b3ac99d1?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzV8MHwxfHNlYXJjaHwzfHxnb2RkZXNzJTIwa2FsaSUyMGNvc21pYyUyMG5pZ2h0JTIwc2t5JTIwc3RhcnMlMjBjb25zdGVsbGF0aW9ufGVufDB8fHx8MTc5MDQxODgxNXww&ixlib=rb-4.1.0&q=85"
+  },
+  "instructions_to_main_agent": [
+    "Load Google Fonts in public/index.html or index.css for Cinzel, Noto Serif Devanagari, Rozha One, and Plus Jakarta Sans.",
+    "Ensure pure-black background (#000000) for the entire app body and canvas element.",
+    "Implement Canvas/WebGL starfield in src/components/StarfieldCanvas.js. Ensure Orion stars (Betelgeuse, Rigel, Bellatrix, Saiph, Alnitak, Alnilam, Mintaka) are explicitly plotted and optionally connected with faint gold constellation lines.",
+    "Position a single golden dash at center screen when idle. Clicking/touching/pressing Enter on it reveals the Mahakali Studios intro badge and activates the devotional prompt input.",
+    "Strictly avoid chat bubbles. Format responses in pure typographic flow: Gold Devanagari Sanskrit text at top, 1px horizontal gradient separator line in amber/gold, quiet muted English translation underneath.",
+    "Support full session controls in MinimalMenu.js: Continue conversation, Stop generation, Start afresh, Export session, Clear session, Audio drone toggle, Constellation toggle.",
+    "Implement Web Speech API for voice input/output so Goddess Kali's fierce & compassionate voice can be spoken or heard.",
+    "Add responsive virtual keyboard handling for mobile (prevent bottom bar overlaps using dvh or window resize visualViewport listeners).",
+    "Include data-testid attributes on every interactive element matching the specified test_ids matrix.",
+    "Add reduced motion support for accessibility, rendering static starfield when enabled."
+  ]
+}

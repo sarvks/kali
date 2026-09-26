@@ -1,0 +1,126 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    --kali-black: #000000;
+    --kali-gold: #f59e0b;
+    --kali-amber: #fbbf24;
+    --kali-crimson: #991b1b;
+}
+
+html,
+body,
+#root {
+    height: 100%;
+    background: #000000;
+}
+
+body {
+    margin: 0;
+    font-family: "Plus Jakarta Sans", "Inter", sans-serif;
+    color: #d4d4d8;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overscroll-behavior: none;
+}
+
+.font-devanagari {
+    font-family: "Rozha One", "Noto Serif Devanagari", serif;
+}
+.font-cinzel {
+    font-family: "Cinzel", serif;
+}
+.font-mono-kali {
+    font-family: "JetBrains Mono", monospace;
+}
+
+/* subtle grain overlay */
+.kali-grain::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.035;
+    z-index: 5;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* golden dash breathing */
+@keyframes dashBreathe {
+    0%,
+    100% {
+        box-shadow:
+            0 0 10px rgba(245, 158, 11, 0.35),
+            0 0 24px rgba(245, 158, 11, 0.15);
+        opacity: 0.85;
+    }
+    50% {
+        box-shadow:
+            0 0 28px rgba(245, 158, 11, 0.85),
+            0 0 60px rgba(245, 158, 11, 0.4);
+        opacity: 1;
+    }
+}
+.dash-breathe {
+    animation: dashBreathe 3.4s ease-in-out infinite;
+}
+
+@keyframes fadeUp {
+    from {
+        opacity: 0;
+        transform: translateY(14px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+.fade-up {
+    animation: fadeUp 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.reduce-motion .dash-breathe,
+.reduce-motion .fade-up {
+    animation: none !important;
+}
+
+/* caret */
+@keyframes caretBlink {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0;
+    }
+}
+.stream-caret {
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    margin-left: 2px;
+    background: #f59e0b;
+    vertical-align: text-bottom;
+    animation: caretBlink 1s step-end infinite;
+}
+
+::selection {
+    background: rgba(245, 158, 11, 0.25);
+    color: #fde68a;
+}
+
+/* thin scrollbar for stream */
+.kali-scroll::-webkit-scrollbar {
+    width: 5px;
+}
+.kali-scroll::-webkit-scrollbar-thumb {
+    background: rgba(245, 158, 11, 0.2);
+    border-radius: 4px;
+}
+
+@layer base {
+    * {
+        border-color: rgba(255, 255, 255, 0.08);
+    }
+}

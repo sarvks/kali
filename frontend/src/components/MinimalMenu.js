@@ -1,0 +1,86 @@
+import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  Menu,
+  X,
+  RotateCcw,
+  Download,
+  Trash2,
+  Volume2,
+  VolumeX,
+  Sparkles,
+  Eye,
+  EyeOff,
+  Square,
+} from "lucide-react";
+
+const Item = ({ testid, icon: Icon, label, onClick, active }) => (
+  <button
+    data-testid={testid}
+    onClick={onClick}
+    className={`flex items-center gap-3 w-full px-4 py-2.5 text-left text-xs uppercase tracking-[0.2em] font-mono-kali transition-colors ${
+      active ? "text-amber-300" : "text-zinc-400 hover:text-amber-300"
+    } hover:bg-amber-500/5`}
+  >
+    <Icon size={15} className="shrink-0" />
+    {label}
+  </button>
+);
+
+export const MinimalMenu = ({
+  onStop,
+  onReset,
+  onExport,
+  onClear,
+  audioOn,
+  onToggleAudio,
+  constellationOn,
+  onToggleConstellation,
+  reducedMotion,
+  onToggleMotion,
+  streaming,
+}) => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="pointer-events-auto">
+      <button
+        data-testid="minimal-menu-btn"
+        onClick={() => setOpen((o) => !o)}
+        aria-label="Session menu"
+        className="p-2.5 rounded-full text-zinc-400 hover:text-amber-300 hover:bg-white/5 transition-colors"
+      >
+        {open ? <X size={20} /> : <Menu size={20} />}
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -8, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.97 }}
+            transition={{ duration: 0.2 }}
+            className="absolute right-0 mt-2 w-60 rounded-xl bg-zinc-950/90 backdrop-blur-xl border border-amber-500/15 py-2 shadow-2xl shadow-black"
+          >
+            <p className="px-4 py-1 text-[9px] uppercase tracking-[0.3em] text-amber-200/40 font-mono-kali">
+              Session
+            </p>
+            {streaming && (
+              <Item testid="menu-stop-btn" icon={Square} label="Stop generation" onClick={() => { onStop(); }} />
+            )}
+            <Item testid="menu-reset-btn" icon={RotateCcw} label="Start afresh" onClick={() => { onReset(); setOpen(false); }} />
+            <Item testid="menu-export-btn" icon={Download} label="Export session" onClick={() => { onExport(); }} />
+            <Item testid="menu-clear-btn" icon={Trash2} label="Clear session" onClick={() => { onClear(); setOpen(false); }} />
+            <div className="my-1.5 h-px bg-white/5" />
+            <p className="px-4 py-1 text-[9px] uppercase tracking-[0.3em] text-amber-200/40 font-mono-kali">
+              Sky
+            </p>
+            <Item testid="menu-audio-toggle" icon={audioOn ? Volume2 : VolumeX} label={audioOn ? "Silence the drone" : "Ambient drone"} active={audioOn} onClick={onToggleAudio} />
+            <Item testid="menu-constellation-toggle" icon={constellationOn ? Eye : EyeOff} label={constellationOn ? "Hide Orion lines" : "Reveal Orion"} active={constellationOn} onClick={onToggleConstellation} />
+            <Item testid="menu-motion-toggle" icon={Sparkles} label={reducedMotion ? "Enable motion" : "Reduce motion"} active={reducedMotion} onClick={onToggleMotion} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};

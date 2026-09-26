@@ -11,7 +11,7 @@ const SpeakButton = ({ onSpeak, state }) => {
       data-testid="speak-btn"
       onClick={onSpeak}
       aria-label="Hear this spoken"
-      className="mt-4 inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.25em] font-mono-kali text-zinc-500 hover:text-amber-300 transition-colors"
+      className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.25em] font-mono-kali text-zinc-500 hover:text-amber-300 transition-colors"
     >
       {state === "loading" ? (
         <Loader2 size={13} className="animate-spin" />
@@ -39,7 +39,9 @@ const Utterance = ({ sanskrit, english, guidance, onSpeak, speakState, onKeep, o
         >
           {english}
         </p>
-        <SpeakButton onSpeak={onSpeak} state={speakState} />
+        <div className="mt-4">
+          <SpeakButton onSpeak={onSpeak} state={speakState} />
+        </div>
         {speakState === "playing" && analyser && <VoiceWaveform analyser={analyser} />}
       </div>
     );

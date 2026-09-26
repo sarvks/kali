@@ -101,6 +101,7 @@ function App() {
   const ttsRef = useRef(null);
   const audioCtxRef = useRef(null);
   const analyserRef = useRef(null);
+  const ttsSeqRef = useRef(0);
   const messagesRef = useRef([]);
   const autoplayedRef = useRef(-1);
 
@@ -241,8 +242,12 @@ function App() {
   };
 
   const stopTts = () => {
-    ttsRef.current?.pause();
+    ttsSeqRef.current++; // invalidate any in-flight or queued TTS playback
+    try {
+      ttsRef.current?.pause();
+    } catch (e) {}
     ttsRef.current = null;
+    analyserRef.current = null;
     setSpeaking(null);
   };
 
@@ -252,9 +257,11 @@ function App() {
       return;
     }
     stopTts();
+    const myId = ++ttsSeqRef.current;
     setSpeaking({ id, state: "loading" });
     try {
       const dataUrl = await ttsGenerate(text);
+      if (myId !== ttsSeqRef.current) return; // a newer request superseded this one
       const audio = new Audio(dataUrl);
       ttsRef.current = audio;
       // Route through an AnalyserNode so the waveform can ripple with her voice.
@@ -276,16 +283,25 @@ function App() {
         analyserRef.current = null;
       }
       audio.onended = () => {
+        if (myId !== ttsSeqRef.current) return;
         analyserRef.current = null;
         setSpeaking(null);
       };
       audio.onerror = () => {
+        if (myId !== ttsSeqRef.current) return;
         analyserRef.current = null;
         setSpeaking(null);
       };
       await audio.play();
+      if (myId !== ttsSeqRef.current) {
+        try {
+          audio.pause();
+        } catch (e) {}
+        return;
+      }
       setSpeaking({ id, state: "playing" });
     } catch (e) {
+      if (myId !== ttsSeqRef.current) return;
       toast.error(e.message || "Her voice could not be summoned.");
       setSpeaking(null);
     }

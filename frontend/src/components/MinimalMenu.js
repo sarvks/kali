@@ -54,6 +54,8 @@ export const MinimalMenu = ({
   onToggleAutoplay,
   dailyReminderOn,
   onToggleDailyReminder,
+  onOpenReminder,
+  onOpenBlessings,
 }) => {
   const [open, setOpen] = useState(false);
 
@@ -89,7 +91,8 @@ export const MinimalMenu = ({
                   {user.email}
                 </p>
                 <Item testid="menu-signout-btn" icon={LogOut} label="Sign out" onClick={() => { onSignOut(); setOpen(false); }} />
-                <Item testid="menu-reminder-toggle" icon={MailPlus} label={dailyReminderOn ? "Daily letter email: on" : "Daily letter email"} active={dailyReminderOn} onClick={onToggleDailyReminder} />
+                <Item testid="menu-blessings-btn" icon={Sparkles} label="My blessings" onClick={() => { onOpenBlessings(); setOpen(false); }} />
+                <Item testid="menu-reminder-toggle" icon={MailPlus} label={dailyReminderOn ? "Daily letter email: on" : "Daily letter email"} active={dailyReminderOn} onClick={() => { onOpenReminder(); setOpen(false); }} />
                 <Item testid="menu-delete-altar-btn" icon={Flame} label="Delete saved altar" onClick={() => { onDeleteAltar(); setOpen(false); }} />
               </>
             ) : (

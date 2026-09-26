@@ -15,8 +15,10 @@ import {
   PlayCircle,
   Share2,
   Wand2,
+  Flame,
 } from "lucide-react";
 import { fetchLetters, fetchLetter, fetchDailyLetter, ttsGenerate } from "../lib/api";
+import { makeLetterCard, shareImage, CARD_STYLES } from "../lib/card";
 
 function chunkText(text, size = 620) {
   const paras = text.split("\n\n");
@@ -64,6 +66,36 @@ export const LettersLibrary = ({
   const [loadingList, setLoadingList] = useState(false);
   const [loadingLetter, setLoadingLetter] = useState(false);
   const [player, setPlayer] = useState({ state: "idle", mode: null, index: 0, total: 0 });
+  const [shareOpen, setShareOpen] = useState(false);
+  const [streak, setStreak] = useState(() => {
+    try {
+      const s = JSON.parse(localStorage.getItem("kali_streak") || "null");
+      return s ? s.count : 0;
+    } catch (e) {
+      return 0;
+    }
+  });
+
+  const bumpStreak = () => {
+    const today = new Date().toDateString();
+    let s = null;
+    try {
+      s = JSON.parse(localStorage.getItem("kali_streak") || "null");
+    } catch (e) {}
+    if (!s) {
+      s = { count: 1, last: today };
+    } else if (s.last === today) {
+      // already counted today
+    } else {
+      const y = new Date();
+      y.setDate(y.getDate() - 1);
+      s = s.last === y.toDateString()
+        ? { count: s.count + 1, last: today }
+        : { count: 1, last: today };
+    }
+    localStorage.setItem("kali_streak", JSON.stringify(s));
+    setStreak(s.count);
+  };
 
   const audioRef = useRef(null);
   const cancelRef = useRef(false);
@@ -97,6 +129,8 @@ export const LettersLibrary = ({
 
   const openLetter = async (id) => {
     stopAudio();
+    setShareOpen(false);
+    bumpStreak();
     setLoadingLetter(true);
     try {
       const l = await fetchLetter(id);
@@ -144,103 +178,21 @@ export const LettersLibrary = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, loadingLetter]);
 
-  const wrapCanvasText = (g, text, x, y, maxW, lh, center) => {
-    const words = text.split(/\s+/);
-    let line = "";
-    let yy = y;
-    for (const w of words) {
-      const test = line ? line + " " + w : w;
-      if (g.measureText(test).width > maxW && line) {
-        g.fillText(line, x, yy);
-        line = w;
-        yy += lh;
-      } else {
-        line = test;
-      }
-    }
-    if (line) g.fillText(line, x, yy);
-    return yy;
-  };
-
-  const makeCard = (letter) =>
-    new Promise((resolve) => {
-      const c = document.createElement("canvas");
-      c.width = 1080;
-      c.height = 1350;
-      const g = c.getContext("2d");
-      g.fillStyle = "#050505";
-      g.fillRect(0, 0, 1080, 1350);
-      g.strokeStyle = "rgba(245,158,11,0.35)";
-      g.lineWidth = 2;
-      g.strokeRect(48, 48, 984, 1254);
-      g.textAlign = "center";
-      g.fillStyle = "#f59e0b";
-      g.font = '700 96px "Rozha One", Georgia, serif';
-      g.fillText("काली", 540, 210);
-      g.fillStyle = "#a98b4b";
-      g.font = '500 22px "JetBrains Mono", monospace';
-      g.fillText("L E T T E R S   T O   H U M A N I T Y", 540, 258);
-      g.fillStyle = "rgba(245,158,11,0.5)";
-      g.font = '400 20px "JetBrains Mono", monospace';
-      g.fillText(letter.id, 540, 330);
-      g.fillStyle = "#fbbf24";
-      g.font = '700 58px "Cinzel", Georgia, serif';
-      wrapCanvasText(g, letter.title, 540, 450, 860, 70, true);
-      g.fillStyle = "#d4d4d8";
-      g.textAlign = "left";
-      g.font = '300 30px Georgia, serif';
-      const excerpt =
-        letter.body.replace("Beloved humanity,", "").trim().slice(0, 300) + "…";
-      wrapCanvasText(g, excerpt, 120, 760, 840, 46);
-      g.fillStyle = "#f59e0b";
-      g.textAlign = "center";
-      g.font = '400 40px "Rozha One", serif';
-      g.fillText("॥ ॐ ॥", 540, 1180);
-      g.fillStyle = "#8a8a8a";
-      g.font = '400 22px "JetBrains Mono", monospace';
-      g.fillText("kali.mahakalistudios.com", 540, 1250);
-      c.toBlob((b) => resolve(b), "image/png");
-    });
-
-  const shareLetter = async (letter) => {
+  const shareLetter = async (letter, styleId) => {
     const link = `${window.location.origin}/?letter=${letter.id}`;
     let blob = null;
     try {
-      blob = await makeCard(letter);
+      blob = await makeLetterCard(letter, styleId);
     } catch (e) {}
-    const file = blob ? new File([blob], `${letter.id}.png`, { type: "image/png" }) : null;
-    try {
-      if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: letter.title,
-          text: `A letter from Kali — ${letter.title}`,
-        });
-        return;
-      }
-      if (navigator.share) {
-        await navigator.share({
-          title: letter.title,
-          text: `A letter from Kali — ${letter.title}`,
-          url: link,
-        });
-        return;
-      }
-    } catch (e) {
-      if (e.name === "AbortError") return;
-    }
-    try {
-      await navigator.clipboard.writeText(link);
-      toast("Link to this letter copied.", { className: "font-mono-kali" });
-    } catch (e) {}
-    if (blob) {
-      const u = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = u;
-      a.download = `${letter.id}.png`;
-      a.click();
-      URL.revokeObjectURL(u);
-    }
+    const result = await shareImage(blob, {
+      title: letter.title,
+      text: `A letter from Kali — ${letter.title}`,
+      url: link,
+      filename: `${letter.id}.png`,
+    });
+    if (result === "copied") toast("Link copied · card saved.", { className: "font-mono-kali" });
+    else if (result === "downloaded") toast("Card image saved.", { className: "font-mono-kali" });
+    setShareOpen(false);
   };
 
   const playSequence = async (chunks, mode) => {
@@ -342,6 +294,15 @@ export const LettersLibrary = ({
               </div>
             </div>
             <div className="flex items-center gap-3">
+              {streak > 0 && (
+                <span
+                  data-testid="reading-streak"
+                  className="hidden sm:inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] font-mono-kali text-amber-300/70"
+                  title="Days you've read a letter"
+                >
+                  <Flame size={13} className="text-amber-400" /> {streak}-day streak
+                </span>
+              )}
               <button
                 data-testid="daily-letter-btn"
                 onClick={openDaily}
@@ -532,13 +493,32 @@ export const LettersLibrary = ({
                       <Sparkles size={13} /> distil to a verse
                     </button>
 
-                    <button
-                      data-testid="letter-share-btn"
-                      onClick={() => shareLetter(selected)}
-                      className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.25em] font-mono-kali text-zinc-500 hover:text-amber-300 transition-colors"
-                    >
-                      <Share2 size={13} /> share
-                    </button>
+                    <div className="relative">
+                      <button
+                        data-testid="letter-share-btn"
+                        onClick={() => setShareOpen((v) => !v)}
+                        className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.25em] font-mono-kali text-zinc-500 hover:text-amber-300 transition-colors"
+                      >
+                        <Share2 size={13} /> share
+                      </button>
+                      {shareOpen && (
+                        <div className="absolute left-0 bottom-full mb-2 w-44 rounded-xl bg-zinc-950/95 border border-amber-500/20 py-2 shadow-2xl shadow-black z-10">
+                          <p className="px-4 py-1 text-[9px] uppercase tracking-[0.25em] text-amber-200/40 font-mono-kali">
+                            Card style
+                          </p>
+                          {CARD_STYLES.map((st) => (
+                            <button
+                              key={st.id}
+                              data-testid={`share-style-${st.id}`}
+                              onClick={() => shareLetter(selected, st.id)}
+                              className="block w-full text-left px-4 py-2 text-xs font-mono-kali text-zinc-300 hover:text-amber-300 hover:bg-amber-500/5 transition-colors"
+                            >
+                              {st.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="space-y-5">

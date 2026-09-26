@@ -14,6 +14,7 @@ from html.parser import HTMLParser
 from urllib.parse import urlparse
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from typing import List, Optional
 
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, BackgroundTasks
@@ -154,6 +155,13 @@ class ResetRequest(BaseModel):
 
 class ReminderRequest(BaseModel):
     enabled: bool
+    hour: Optional[int] = None
+    tz: Optional[str] = None
+
+
+class BlessingRequest(BaseModel):
+    sanskrit: str = ""
+    english: str = ""
 
 
 class TTSRequest(BaseModel):
@@ -346,6 +354,7 @@ async def ensure_indexes():
     await db.password_resets.create_index("expires_at", expireAfterSeconds=0)
     await db.password_resets.create_index("token_hash")
     await db.saved_letters.create_index([("user_id", 1), ("letter_id", 1)], unique=True)
+    await db.blessings.create_index([("user_id", 1), ("created_at", -1)])
 
 
 async def check_rate_limit(key: str) -> bool:
@@ -431,7 +440,8 @@ async def register(req: RegisterRequest, response: Response):
     res = await db.users.insert_one(doc)
     uid = str(res.inserted_id)
     set_auth_cookie(response, create_access_token(uid, email))
-    return {"id": uid, "email": email, "name": doc["name"], "daily_reminder": False}
+    return {"id": uid, "email": email, "name": doc["name"], "daily_reminder": False,
+            "reminder_hour": 8, "reminder_tz": "UTC"}
 
 
 @api_router.post("/auth/login")
@@ -443,7 +453,9 @@ async def login(req: LoginRequest, response: Response):
     uid = str(user["_id"])
     set_auth_cookie(response, create_access_token(uid, email))
     return {"id": uid, "email": email, "name": user.get("name", email.split("@")[0]),
-            "daily_reminder": user.get("daily_reminder", False)}
+            "daily_reminder": user.get("daily_reminder", False),
+            "reminder_hour": user.get("reminder_hour", 8),
+            "reminder_tz": user.get("reminder_tz", "UTC")}
 
 
 @api_router.post("/auth/logout")
@@ -482,6 +494,7 @@ async def claim_thread(req: ClaimRequest, user: dict = Depends(require_user)):
 async def delete_account(response: Response, user: dict = Depends(require_user)):
     await db.messages.delete_many({"token": acct_key(user)})
     await db.saved_letters.delete_many({"user_id": user["id"]})
+    await db.blessings.delete_many({"user_id": user["id"]})
     await db.users.delete_one({"_id": ObjectId(user["id"])})
     await db.password_resets.delete_many({"user_id": user["id"]})
     response.delete_cookie("access_token", path="/")
@@ -522,10 +535,42 @@ async def unsave_letter(letter_id: str, user: dict = Depends(require_user)):
 
 @api_router.post("/auth/daily-reminder")
 async def set_daily_reminder(req: ReminderRequest, user: dict = Depends(require_user)):
-    await db.users.update_one(
-        {"_id": ObjectId(user["id"])},
-        {"$set": {"daily_reminder": bool(req.enabled)}})
-    return {"ok": True, "enabled": bool(req.enabled)}
+    update = {"daily_reminder": bool(req.enabled)}
+    if req.hour is not None:
+        update["reminder_hour"] = max(0, min(23, int(req.hour)))
+    if req.tz:
+        try:
+            ZoneInfo(req.tz)
+            update["reminder_tz"] = req.tz[:64]
+        except Exception:
+            pass
+    await db.users.update_one({"_id": ObjectId(user["id"])}, {"$set": update})
+    return {"ok": True, **update}
+
+
+@api_router.get("/auth/blessings")
+async def get_blessings(user: dict = Depends(require_user)):
+    docs = await db.blessings.find({"user_id": user["id"]}).sort("created_at", -1).to_list(500)
+    out = []
+    for d in docs:
+        out.append({"id": str(d["_id"]), "sanskrit": d.get("sanskrit", ""),
+                    "english": d.get("english", ""), "created_at": d.get("created_at")})
+    return {"blessings": out}
+
+
+@api_router.post("/auth/blessings")
+async def add_blessing(req: BlessingRequest, user: dict = Depends(require_user)):
+    doc = {"user_id": user["id"], "sanskrit": (req.sanskrit or "")[:1200],
+           "english": (req.english or "")[:2000],
+           "created_at": datetime.now(timezone.utc).isoformat()}
+    res = await db.blessings.insert_one(doc)
+    return {"id": str(res.inserted_id)}
+
+
+@api_router.delete("/auth/blessings/{blessing_id}")
+async def delete_blessing(blessing_id: str, user: dict = Depends(require_user)):
+    await db.blessings.delete_one({"_id": ObjectId(blessing_id), "user_id": user["id"]})
+    return {"ok": True}
 
 
 def daily_letter_email_html(name: str, letter: dict, link: str) -> str:
@@ -554,22 +599,28 @@ def daily_letter_email_html(name: str, letter: dict, link: str) -> str:
 
 
 async def run_daily_reminders(run_id: str):
-    day = datetime.now(timezone.utc).date().isoformat()
-    existing = await db.cron_runs.find_one({"job": "daily-reminder", "day": day})
-    if existing:
-        return
-    await db.cron_runs.insert_one({"job": "daily-reminder", "day": day, "run_id": run_id,
-                                   "ts": datetime.now(timezone.utc)})
+    now_utc = datetime.now(timezone.utc)
     count = await db.letters.count_documents({})
     if not count:
-        return
-    num = (datetime.now(timezone.utc).date().toordinal() % count) + 1
-    letter = await db.letters.find_one({"number": num}, {"_id": 0})
-    if not letter:
         return
     users = await db.users.find({"daily_reminder": True}).to_list(10000)
     sent = 0
     for u in users:
+        tz_name = u.get("reminder_tz", "UTC")
+        hour = int(u.get("reminder_hour", 8))
+        try:
+            local = now_utc.astimezone(ZoneInfo(tz_name))
+        except Exception:
+            local = now_utc
+        if local.hour != hour:
+            continue
+        today = local.date().isoformat()
+        if u.get("last_reminder_sent") == today:
+            continue
+        num = (local.date().toordinal() % count) + 1
+        letter = await db.letters.find_one({"number": num}, {"_id": 0})
+        if not letter:
+            continue
         link = f"{FRONTEND_URL}/?letter={letter['id']}"
         try:
             await send_email(
@@ -577,10 +628,12 @@ async def run_daily_reminders(run_id: str):
                 subject=f"Today's letter — {letter['title']}",
                 html=daily_letter_email_html(u.get("name", u["email"].split("@")[0]), letter, link),
             )
+            await db.users.update_one({"_id": u["_id"]},
+                                      {"$set": {"last_reminder_sent": today}})
             sent += 1
         except Exception as e:  # noqa: BLE001
             logger.error(f"daily reminder send failed for a user: {e}")
-    logger.info(f"daily reminders sent: {sent}/{len(users)} for {day}")
+    logger.info(f"daily reminders run {run_id}: sent {sent} at {now_utc.isoformat()}")
 
 
 @api_router.post("/cron/daily-reminder")

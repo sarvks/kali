@@ -56,15 +56,40 @@ export async function unsaveLetter(id) {
   });
 }
 
-export async function setDailyReminder(enabled) {
+export async function setDailyReminder(enabled, hour, tz) {
   const res = await fetch(`${API}/auth/daily-reminder`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ enabled }),
+    body: JSON.stringify({ enabled, hour, tz }),
   });
   if (!res.ok) throw new Error("Could not update your reminder.");
   return res.json();
+}
+
+export async function getBlessings() {
+  const res = await fetch(`${API}/auth/blessings`, { credentials: "include" });
+  if (!res.ok) return [];
+  const d = await res.json();
+  return d.blessings || [];
+}
+
+export async function saveBlessing(sanskrit, english) {
+  const res = await fetch(`${API}/auth/blessings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ sanskrit, english }),
+  });
+  if (!res.ok) throw new Error("Could not keep this blessing.");
+  return res.json();
+}
+
+export async function deleteBlessing(id) {
+  await fetch(`${API}/auth/blessings/${id}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
 }
 
 export async function authMe() {

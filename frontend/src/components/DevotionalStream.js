@@ -24,7 +24,7 @@ const SpeakButton = ({ onSpeak, state }) => {
   );
 };
 
-const Utterance = ({ sanskrit, english, guidance, onSpeak, speakState }) => {
+const Utterance = ({ sanskrit, english, guidance, onSpeak, speakState, onKeep, onShare }) => {
   const iast = sanskrit ? transliterate(sanskrit) : "";
   if (guidance) {
     return (
@@ -72,7 +72,27 @@ const Utterance = ({ sanskrit, english, guidance, onSpeak, speakState }) => {
           {english}
         </p>
       )}
-      <SpeakButton onSpeak={onSpeak} state={speakState} />
+      <div className="mt-4 flex items-center justify-center gap-5 flex-wrap">
+        <SpeakButton onSpeak={onSpeak} state={speakState} />
+        {onShare && (
+          <button
+            data-testid="verse-share-btn"
+            onClick={onShare}
+            className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.25em] font-mono-kali text-zinc-500 hover:text-amber-300 transition-colors"
+          >
+            share as card
+          </button>
+        )}
+        {onKeep && (
+          <button
+            data-testid="verse-keep-btn"
+            onClick={onKeep}
+            className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.25em] font-mono-kali text-zinc-500 hover:text-amber-300 transition-colors"
+          >
+            keep
+          </button>
+        )}
+      </div>
     </div>
   );
 };
@@ -83,6 +103,8 @@ export const DevotionalStream = ({
   streamText,
   onSpeak,
   speaking,
+  onKeep,
+  onShare,
 }) => {
   const endRef = useRef(null);
 
@@ -121,6 +143,8 @@ export const DevotionalStream = ({
               {...parsed}
               onSpeak={onSpeak ? () => onSpeak(i, speakText) : null}
               speakState={speaking?.id === i ? speaking.state : "idle"}
+              onKeep={!parsed.guidance && onKeep ? () => onKeep(parsed) : null}
+              onShare={!parsed.guidance && onShare ? () => onShare(parsed) : null}
             />
           </motion.div>
         );

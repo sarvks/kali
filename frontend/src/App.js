@@ -12,6 +12,9 @@ import { MahakaliIntroModal } from "./components/MahakaliIntroModal";
 import { AuthModal } from "./components/AuthModal";
 import { ResetPassphraseModal } from "./components/ResetPassphraseModal";
 import { LettersLibrary } from "./components/LettersLibrary";
+import { ReminderModal } from "./components/ReminderModal";
+import { BlessingsModal } from "./components/BlessingsModal";
+import { makeBlessingCard, shareImage } from "./lib/card";
 import {
   getToken,
   resetToken,
@@ -34,6 +37,7 @@ import {
   saveLetter,
   unsaveLetter,
   setDailyReminder,
+  saveBlessing,
 } from "./lib/auth";
 
 const prefersReduced =
@@ -60,6 +64,9 @@ function App() {
   const [savedIds, setSavedIds] = useState([]);
   const [autoOpenLetterId, setAutoOpenLetterId] = useState(null);
   const [dailyReminderOn, setDailyReminderOn] = useState(false);
+  const [reminderHour, setReminderHour] = useState(8);
+  const [showReminder, setShowReminder] = useState(false);
+  const [showBlessings, setShowBlessings] = useState(false);
   const [continueReading, setContinueReading] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("kali_reading") || "null");
@@ -107,6 +114,7 @@ function App() {
       if (u) {
         setUser(u);
         setDailyReminderOn(!!u.daily_reminder);
+        setReminderHour(u.reminder_hour ?? 8);
         getSavedLetters().then((d) => setSavedIds(d.ids || []));
         const msgs = await loadAuthThread();
         setMessages(msgs);
@@ -318,6 +326,7 @@ function App() {
     setUser(u);
     setShowAuth(false);
     setDailyReminderOn(!!u.daily_reminder);
+    setReminderHour(u.reminder_hour ?? 8);
     getSavedLetters().then((d) => setSavedIds(d.ids || []));
     // migrate the anonymous thread into the account
     try {
@@ -372,21 +381,52 @@ function App() {
     setShowLetters(true);
   };
 
-  const toggleDailyReminder = async () => {
-    if (!user) return;
-    const next = !dailyReminderOn;
-    setDailyReminderOn(next);
+  const saveReminder = async (enabled, hour, tz) => {
     try {
-      await setDailyReminder(next);
+      await setDailyReminder(enabled, hour, tz);
+      setDailyReminderOn(enabled);
+      setReminderHour(hour);
       toast(
-        next
-          ? "Each morning, today's letter will find your inbox."
+        enabled
+          ? "Today's letter will reach you each morning."
           : "Daily letter emails silenced.",
         { className: "font-mono-kali" }
       );
     } catch (e) {
-      setDailyReminderOn(!next);
       toast.error("Could not update your reminder.");
+    }
+  };
+
+  const handleKeepVerse = async (parsed) => {
+    if (!user) {
+      toast("Sign in to keep a blessing on your altar.", { className: "font-mono-kali" });
+      setShowAuth(true);
+      return;
+    }
+    try {
+      await saveBlessing(parsed.sanskrit || "", parsed.english || "");
+      toast("Blessing kept on your altar.", { className: "font-mono-kali" });
+    } catch (e) {
+      toast.error("Could not keep this blessing.");
+    }
+  };
+
+  const handleShareVerse = async (parsed) => {
+    try {
+      const blob = await makeBlessingCard(
+        { sanskrit: parsed.sanskrit || "", english: parsed.english || "" },
+        "midnight"
+      );
+      const res = await shareImage(blob, {
+        title: "A blessing from Kali",
+        text: parsed.english || "A blessing from Kali",
+        url: window.location.origin,
+        filename: "kali-blessing.png",
+      });
+      if (res === "downloaded" || res === "copied")
+        toast("Blessing card saved.", { className: "font-mono-kali" });
+    } catch (e) {
+      toast.error("Could not create the card.");
     }
   };
 
@@ -463,7 +503,9 @@ function App() {
           autoplayOn={autoplayOn}
           onToggleAutoplay={toggleAutoplay}
           dailyReminderOn={dailyReminderOn}
-          onToggleDailyReminder={toggleDailyReminder}
+          onToggleDailyReminder={() => setShowReminder(true)}
+          onOpenReminder={() => setShowReminder(true)}
+          onOpenBlessings={() => setShowBlessings(true)}
         />
       </div>
 
@@ -552,6 +594,8 @@ function App() {
                 streamText={streamText}
                 onSpeak={handleSpeak}
                 speaking={speaking}
+                onKeep={handleKeepVerse}
+                onShare={handleShareVerse}
               />
             )}
           </div>
@@ -589,6 +633,17 @@ function App() {
         stopExternal={stopTts}
         autoOpenId={autoOpenLetterId}
         onConsumedAutoOpen={() => setAutoOpenLetterId(null)}
+      />
+      <ReminderModal
+        open={showReminder}
+        onClose={() => setShowReminder(false)}
+        initialEnabled={dailyReminderOn}
+        initialHour={reminderHour}
+        onSave={saveReminder}
+      />
+      <BlessingsModal
+        open={showBlessings}
+        onClose={() => setShowBlessings(false)}
       />
       <Toaster
         theme="dark"

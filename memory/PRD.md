@@ -47,8 +47,14 @@ A responsive devotional conversation web app (kali.mahakalistudios.com) evoking 
 - **Continue Reading**: the reader saves the seeker's scroll position per letter to localStorage; on return, a "↩ Continue reading — {title}" entry appears and reopening the letter restores the scroll position. Verified.
 - **Verse From Saved**: in the library's "Saved" tab, a "Weave these into a closing blessing" button asks Kali (in chat) to weave the seeker's saved letters into one short closing Sanskrit blessing. Verified (button + chat handoff).
 - **Letter Share**: a "share" button on any letter builds a portrait card image (canvas: काली, title, excerpt, ॥ ॐ ॥, domain) and uses the Web Share API (with image file when supported), falling back to copying a `?letter={id}` deep link + downloading the card. The deep link auto-opens that letter on load. Verified.
-- **Daily Reminder**: signed-in seekers opt into a morning email via the menu (`POST /api/auth/daily-reminder`). A platform cron (`.emergent/crons.yml` → `daily-letter-mail`, 13:00 UTC) hits `POST /api/cron/daily-reminder` (Bearer `WEBHOOK_CRON_SECRET`, acks immediately + backgrounds the work, idempotent per day) and emails that day's letter via Resend. Verified: 401 without auth, sent 1/1 to opted-in user with auth.
-- **Shooting star**: the starfield now spawns an occasional meteor (gold streak with fading tail) every ~4–12s, disabled under reduced motion. Verified sky renders correctly.
+- `DELETE /api/auth/blessings/{id}` — remove a kept blessing
+- `POST /api/auth/daily-reminder` {enabled, hour, tz} — opt-in + per-user local hour/timezone
+
+## Implemented (iteration 7 — 2026-06-26)
+- **Shared Card Styles**: sharing a letter offers 3 card designs (Midnight Gold / Ivory Scroll / Ember), rendered in `frontend/src/lib/card.js`. Verified.
+- **Blessing Keepsake**: every chat verse has "keep" (saves to `db.blessings`, sign-in required) and "share as card" (golden blessing card). A "My blessings" menu opens a modal to view, share, or remove kept blessings. Backend CRUD + UI verified.
+- **Reminder Time**: the daily-letter email now respects each seeker's chosen local hour + auto-detected IANA timezone. The cron runs hourly (`.emergent/crons.yml` → `0 * * * *`) and emails each opted-in user once when their local hour matches (per-user idempotent via `last_reminder_sent`). Verified send at matching hour.
+- **Reading Streak**: a gentle "🔥 N-day streak" (localStorage, works anonymously) shows in the library header, incrementing on consecutive days a letter is opened. Verified.
 
 ## Backlog
 - **P1:** Opt-in saved history with authentication + deletion; multilingual output + transliteration; qualified Sanskrit reviewer sign-off on launch samples.

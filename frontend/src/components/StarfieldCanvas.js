@@ -102,6 +102,49 @@ export const StarfieldCanvas = ({ reducedMotion, showConstellation, onStarSelect
       ctx.fill();
     };
 
+    let meteor = null;
+    let nextMeteorAt = 2200;
+
+    const drawMeteor = (t) => {
+      if (reducedMotion) return;
+      if (!meteor && t > nextMeteorAt) {
+        const ang = Math.PI * (0.13 + Math.random() * 0.22);
+        const speed = 11 + Math.random() * 9;
+        meteor = {
+          x: w * (0.08 + Math.random() * 0.7),
+          y: h * (0.03 + Math.random() * 0.22),
+          vx: Math.cos(ang) * speed,
+          vy: Math.sin(ang) * speed,
+          life: 0,
+          max: 55 + Math.random() * 35,
+        };
+      }
+      if (!meteor) return;
+      meteor.x += meteor.vx;
+      meteor.y += meteor.vy;
+      meteor.life += 1;
+      const fade = Math.max(0, 1 - meteor.life / meteor.max);
+      const tailX = meteor.x - meteor.vx * 7;
+      const tailY = meteor.y - meteor.vy * 7;
+      const grad = ctx.createLinearGradient(meteor.x, meteor.y, tailX, tailY);
+      grad.addColorStop(0, `rgba(255,244,214,${0.9 * fade})`);
+      grad.addColorStop(1, "rgba(255,244,214,0)");
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(meteor.x, meteor.y);
+      ctx.lineTo(tailX, tailY);
+      ctx.stroke();
+      ctx.fillStyle = `rgba(255,252,244,${fade})`;
+      ctx.beginPath();
+      ctx.arc(meteor.x, meteor.y, 1.7, 0, Math.PI * 2);
+      ctx.fill();
+      if (meteor.life > meteor.max || meteor.x > w + 60 || meteor.y > h + 60) {
+        meteor = null;
+        nextMeteorAt = t + 4000 + Math.random() * 8000;
+      }
+    };
+
     const render = (t) => {
       ctx.clearRect(0, 0, w, h);
       ctx.fillStyle = "#000000";
@@ -121,6 +164,8 @@ export const StarfieldCanvas = ({ reducedMotion, showConstellation, onStarSelect
         const a = Math.max(0.05, Math.min(1, flick));
         drawStar(s.x * w + px * 0.4, s.y * h + py * 0.4, s.r, a);
       }
+
+      drawMeteor(t);
 
       // Orion
       const { ox, oy, size } = orionRegion();

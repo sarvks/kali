@@ -17,6 +17,7 @@ import {
   Flame,
   ScrollText,
   AudioLines,
+  MailPlus,
 } from "lucide-react";
 
 const Item = ({ testid, icon: Icon, label, onClick, active }) => (
@@ -51,6 +52,8 @@ export const MinimalMenu = ({
   onOpenLetters,
   autoplayOn,
   onToggleAutoplay,
+  dailyReminderOn,
+  onToggleDailyReminder,
 }) => {
   const [open, setOpen] = useState(false);
 
@@ -86,6 +89,7 @@ export const MinimalMenu = ({
                   {user.email}
                 </p>
                 <Item testid="menu-signout-btn" icon={LogOut} label="Sign out" onClick={() => { onSignOut(); setOpen(false); }} />
+                <Item testid="menu-reminder-toggle" icon={MailPlus} label={dailyReminderOn ? "Daily letter email: on" : "Daily letter email"} active={dailyReminderOn} onClick={onToggleDailyReminder} />
                 <Item testid="menu-delete-altar-btn" icon={Flame} label="Delete saved altar" onClick={() => { onDeleteAltar(); setOpen(false); }} />
               </>
             ) : (

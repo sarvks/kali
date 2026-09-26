@@ -33,6 +33,7 @@ import {
   getSavedLetters,
   saveLetter,
   unsaveLetter,
+  setDailyReminder,
 } from "./lib/auth";
 
 const prefersReduced =
@@ -58,6 +59,14 @@ function App() {
   const [dailyLetter, setDailyLetter] = useState(null);
   const [savedIds, setSavedIds] = useState([]);
   const [autoOpenLetterId, setAutoOpenLetterId] = useState(null);
+  const [dailyReminderOn, setDailyReminderOn] = useState(false);
+  const [continueReading, setContinueReading] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("kali_reading") || "null");
+    } catch (e) {
+      return null;
+    }
+  });
   const [autoplayOn, setAutoplayOn] = useState(
     () => localStorage.getItem("kali_autoplay") === "1"
   );
@@ -79,6 +88,17 @@ function App() {
     messagesRef.current = messages;
   }, [messages]);
 
+  // deep-link: /?letter=MT-KALI-#### opens the library to that letter
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const lid = params.get("letter");
+    if (lid) {
+      setAutoOpenLetterId(lid);
+      setShowLetters(true);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
   // initial load: check account, else anon thread
   useEffect(() => {
     (async () => {
@@ -86,6 +106,7 @@ function App() {
       const u = await authMe();
       if (u) {
         setUser(u);
+        setDailyReminderOn(!!u.daily_reminder);
         getSavedLetters().then((d) => setSavedIds(d.ids || []));
         const msgs = await loadAuthThread();
         setMessages(msgs);
@@ -296,6 +317,7 @@ function App() {
   const handleAuthed = async (u) => {
     setUser(u);
     setShowAuth(false);
+    setDailyReminderOn(!!u.daily_reminder);
     getSavedLetters().then((d) => setSavedIds(d.ids || []));
     // migrate the anonymous thread into the account
     try {
@@ -342,6 +364,38 @@ function App() {
     if (!dailyLetter) return;
     setAutoOpenLetterId(dailyLetter.id);
     setShowLetters(true);
+  };
+
+  const openContinueReading = () => {
+    if (!continueReading) return;
+    setAutoOpenLetterId(continueReading.id);
+    setShowLetters(true);
+  };
+
+  const toggleDailyReminder = async () => {
+    if (!user) return;
+    const next = !dailyReminderOn;
+    setDailyReminderOn(next);
+    try {
+      await setDailyReminder(next);
+      toast(
+        next
+          ? "Each morning, today's letter will find your inbox."
+          : "Daily letter emails silenced.",
+        { className: "font-mono-kali" }
+      );
+    } catch (e) {
+      setDailyReminderOn(!next);
+      toast.error("Could not update your reminder.");
+    }
+  };
+
+  const handleVerseFromSaved = (titles) => {
+    setShowLetters(false);
+    setActivated(true);
+    const list = titles.slice(0, 12).join("; ");
+    const msg = `Weave the essence of these letters of yours into a single short closing Sanskrit blessing with its English meaning: ${list}`;
+    setTimeout(() => handleSend(msg), 250);
   };
 
   const handleSignOut = async () => {
@@ -408,6 +462,8 @@ function App() {
           onOpenLetters={() => setShowLetters(true)}
           autoplayOn={autoplayOn}
           onToggleAutoplay={toggleAutoplay}
+          dailyReminderOn={dailyReminderOn}
+          onToggleDailyReminder={toggleDailyReminder}
         />
       </div>
 
@@ -479,6 +535,15 @@ function App() {
                     </span>
                   </button>
                 )}
+                {continueReading && continueReading.id && (
+                  <button
+                    data-testid="continue-reading-entry"
+                    onClick={openContinueReading}
+                    className="mt-6 block mx-auto text-[11px] font-mono-kali text-zinc-500 hover:text-amber-300 transition-colors"
+                  >
+                    ↩ Continue reading — <span className="italic">{continueReading.title}</span>
+                  </button>
+                )}
               </div>
             ) : (
               <DevotionalStream
@@ -519,6 +584,8 @@ function App() {
         onToggleSave={handleToggleSave}
         onSignInPrompt={() => setShowAuth(true)}
         onLetterToVerse={handleLetterToVerse}
+        onVerseFromSaved={handleVerseFromSaved}
+        onProgress={setContinueReading}
         stopExternal={stopTts}
         autoOpenId={autoOpenLetterId}
         onConsumedAutoOpen={() => setAutoOpenLetterId(null)}

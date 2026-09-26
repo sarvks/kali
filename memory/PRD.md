@@ -41,7 +41,14 @@ A responsive devotional conversation web app (kali.mahakalistudios.com) evoking 
 - **Letter Autoplay (read in full)**: the reader can read an entire letter aloud, chunked by paragraph (~620-char chunks) and played sequentially through ElevenLabs, with a live "reading X/Y — stop" control. Verified via the shared TTS path.
 - **Daily Letter**: `GET /api/letters/daily` returns a deterministic letter for the current UTC date. A "☾ Today's Letter — {title}" invitation appears on the entry screen and a "Today's Letter" button sits in the library header (auto-opens that letter). Verified (today = MT-KALI-0286).
 - **Save a Letter**: signed-in seekers bookmark letters to their altar. Endpoints `GET/POST/DELETE /api/auth/saved-letters[/{id}]` (collection `db.saved_letters`, unique per user+letter, removed on account deletion). Reader has a save/saved toggle; library has an "All / Saved" tab; anonymous users are prompted to sign in. Verified end-to-end.
-- **Letter to Verse**: a "distil to a verse" button on any letter closes the library, opens the chat, and asks Kali to distil that letter into a short Sanskrit verse + English meaning (streams in the normal devotional format). Verified (chat request fires, library closes).
+- **Letter to Verse**: a "distil to a verse" button on any letter closes the library, opens the chat, and asks Kali to distil that letter into a short Sanskrit verse + English meaning.
+
+## Implemented (iteration 6 — 2026-06-26)
+- **Continue Reading**: the reader saves the seeker's scroll position per letter to localStorage; on return, a "↩ Continue reading — {title}" entry appears and reopening the letter restores the scroll position. Verified.
+- **Verse From Saved**: in the library's "Saved" tab, a "Weave these into a closing blessing" button asks Kali (in chat) to weave the seeker's saved letters into one short closing Sanskrit blessing. Verified (button + chat handoff).
+- **Letter Share**: a "share" button on any letter builds a portrait card image (canvas: काली, title, excerpt, ॥ ॐ ॥, domain) and uses the Web Share API (with image file when supported), falling back to copying a `?letter={id}` deep link + downloading the card. The deep link auto-opens that letter on load. Verified.
+- **Daily Reminder**: signed-in seekers opt into a morning email via the menu (`POST /api/auth/daily-reminder`). A platform cron (`.emergent/crons.yml` → `daily-letter-mail`, 13:00 UTC) hits `POST /api/cron/daily-reminder` (Bearer `WEBHOOK_CRON_SECRET`, acks immediately + backgrounds the work, idempotent per day) and emails that day's letter via Resend. Verified: 401 without auth, sent 1/1 to opted-in user with auth.
+- **Shooting star**: the starfield now spawns an occasional meteor (gold streak with fading tail) every ~4–12s, disabled under reduced motion. Verified sky renders correctly.
 
 ## Backlog
 - **P1:** Opt-in saved history with authentication + deletion; multilingual output + transliteration; qualified Sanskrit reviewer sign-off on launch samples.

@@ -56,6 +56,17 @@ export async function unsaveLetter(id) {
   });
 }
 
+export async function setDailyReminder(enabled) {
+  const res = await fetch(`${API}/auth/daily-reminder`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ enabled }),
+  });
+  if (!res.ok) throw new Error("Could not update your reminder.");
+  return res.json();
+}
+
 export async function authMe() {
   const res = await fetch(`${API}/auth/me`, { credentials: "include" });
   if (!res.ok) return null;

@@ -1,0 +1,8 @@
+crons:
+  - name: daily-letter-mail
+    description: "Emails today's Letter to Humanity each morning to seekers who opted in"
+    cron: "0 13 * * *"
+    endpoint: "{{BASE_URL}}/api/cron/daily-reminder"
+    method: POST
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    enabled: true

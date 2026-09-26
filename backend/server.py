@@ -4,6 +4,7 @@ import re
 import json
 import base64
 import hashlib
+import hmac
 import ipaddress
 import logging
 import secrets
@@ -15,7 +16,7 @@ from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -52,6 +53,7 @@ EMAIL_BASE_URL = "https://integrations.emergentagent.com"
 EMAIL_KEY = os.environ.get('EMERGENT_EMAIL_KEY', '')
 EMAIL_FROM_NAME = os.environ.get('EMAIL_FROM_NAME', 'Mahakali Studios')
 RESET_TOKEN_TTL_MIN = 30
+WEBHOOK_CRON_SECRET = os.environ.get('WEBHOOK_CRON_SECRET', '')
 
 MAX_INPUT_CHARS = 1200
 MAX_OUTPUT_TOKENS = 700
@@ -148,6 +150,10 @@ class ForgotRequest(BaseModel):
 class ResetRequest(BaseModel):
     token: str
     password: str
+
+
+class ReminderRequest(BaseModel):
+    enabled: bool
 
 
 class TTSRequest(BaseModel):
@@ -425,7 +431,7 @@ async def register(req: RegisterRequest, response: Response):
     res = await db.users.insert_one(doc)
     uid = str(res.inserted_id)
     set_auth_cookie(response, create_access_token(uid, email))
-    return {"id": uid, "email": email, "name": doc["name"]}
+    return {"id": uid, "email": email, "name": doc["name"], "daily_reminder": False}
 
 
 @api_router.post("/auth/login")
@@ -436,7 +442,8 @@ async def login(req: LoginRequest, response: Response):
         raise HTTPException(status_code=401, detail="Email or passphrase is not recognised.")
     uid = str(user["_id"])
     set_auth_cookie(response, create_access_token(uid, email))
-    return {"id": uid, "email": email, "name": user.get("name", email.split("@")[0])}
+    return {"id": uid, "email": email, "name": user.get("name", email.split("@")[0]),
+            "daily_reminder": user.get("daily_reminder", False)}
 
 
 @api_router.post("/auth/logout")
@@ -511,6 +518,81 @@ async def save_letter(letter_id: str, user: dict = Depends(require_user)):
 async def unsave_letter(letter_id: str, user: dict = Depends(require_user)):
     await db.saved_letters.delete_many({"user_id": user["id"], "letter_id": letter_id})
     return {"ok": True}
+
+
+@api_router.post("/auth/daily-reminder")
+async def set_daily_reminder(req: ReminderRequest, user: dict = Depends(require_user)):
+    await db.users.update_one(
+        {"_id": ObjectId(user["id"])},
+        {"$set": {"daily_reminder": bool(req.enabled)}})
+    return {"ok": True, "enabled": bool(req.enabled)}
+
+
+def daily_letter_email_html(name: str, letter: dict, link: str) -> str:
+    opening = escape(letter["body"].replace("Beloved humanity,", "").strip()[:340]) + "…"
+    return (
+        '<table role="presentation" width="100%" style="background:#050505"><tr><td '
+        'style="padding:32px;font-family:Georgia,serif;color:#e8e8e8">'
+        '<div style="max-width:520px;margin:0 auto;background:#0b0b0d;border:1px solid '
+        '#3a2d10;border-radius:14px;padding:32px">'
+        '<p style="font-size:26px;color:#f59e0b;margin:0 0 4px;letter-spacing:2px">काली</p>'
+        '<p style="font-size:11px;letter-spacing:4px;color:#a98b4b;text-transform:uppercase;'
+        'margin:0 0 24px">Today\'s Letter to Humanity</p>'
+        f'<p style="font-size:15px;line-height:1.7">Namaste {escape(name)},</p>'
+        f'<p style="font-size:20px;color:#fbbf24;font-family:Georgia,serif;margin:18px 0 8px">'
+        f'{escape(letter["title"])}</p>'
+        f'<p style="font-size:15px;line-height:1.8;color:#c9c9c9">{opening}</p>'
+        f'<p style="text-align:center;margin:28px 0"><a href="{escape(link)}" '
+        'style="background:#f59e0b;color:#0b0b0d;text-decoration:none;padding:12px 28px;'
+        'border-radius:999px;font-size:13px;letter-spacing:2px;text-transform:uppercase;'
+        'font-family:Arial,sans-serif">Read the whole letter</a></p>'
+        '<p style="font-size:11px;color:#6b6b6b;margin-top:24px">Sent by Mahakali Studios '
+        'because you asked for a daily letter. Open the app menu to stop these anytime. '
+        'We never ask for your passphrase by email.</p>'
+        '</div></td></tr></table>'
+    )
+
+
+async def run_daily_reminders(run_id: str):
+    day = datetime.now(timezone.utc).date().isoformat()
+    existing = await db.cron_runs.find_one({"job": "daily-reminder", "day": day})
+    if existing:
+        return
+    await db.cron_runs.insert_one({"job": "daily-reminder", "day": day, "run_id": run_id,
+                                   "ts": datetime.now(timezone.utc)})
+    count = await db.letters.count_documents({})
+    if not count:
+        return
+    num = (datetime.now(timezone.utc).date().toordinal() % count) + 1
+    letter = await db.letters.find_one({"number": num}, {"_id": 0})
+    if not letter:
+        return
+    users = await db.users.find({"daily_reminder": True}).to_list(10000)
+    sent = 0
+    for u in users:
+        link = f"{FRONTEND_URL}/?letter={letter['id']}"
+        try:
+            await send_email(
+                to=u["email"],
+                subject=f"Today's letter — {letter['title']}",
+                html=daily_letter_email_html(u.get("name", u["email"].split("@")[0]), letter, link),
+            )
+            sent += 1
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"daily reminder send failed for a user: {e}")
+    logger.info(f"daily reminders sent: {sent}/{len(users)} for {day}")
+
+
+@api_router.post("/cron/daily-reminder")
+async def cron_daily_reminder(request: Request, background: BackgroundTasks):
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    auth = request.headers.get("Authorization", "")
+    token = auth[7:] if auth.startswith("Bearer ") else ""
+    if not token or not WEBHOOK_CRON_SECRET or not hmac.compare_digest(token, WEBHOOK_CRON_SECRET):
+        raise HTTPException(status_code=401, detail="unauthorized")
+    run_id = request.headers.get("X-Webhook-Id") or f"manual-{datetime.now(timezone.utc).isoformat()}"
+    background.add_task(run_daily_reminders, run_id)
+    return {"accepted": True}
 
 
 @api_router.post("/auth/forgot")

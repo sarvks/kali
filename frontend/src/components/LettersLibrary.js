@@ -13,6 +13,8 @@ import {
   Sparkles,
   Sun,
   PlayCircle,
+  Share2,
+  Wand2,
 } from "lucide-react";
 import { fetchLetters, fetchLetter, fetchDailyLetter, ttsGenerate } from "../lib/api";
 
@@ -49,6 +51,8 @@ export const LettersLibrary = ({
   onToggleSave,
   onSignInPrompt,
   onLetterToVerse,
+  onVerseFromSaved,
+  onProgress,
   stopExternal,
   autoOpenId,
   onConsumedAutoOpen,
@@ -63,6 +67,26 @@ export const LettersLibrary = ({
 
   const audioRef = useRef(null);
   const cancelRef = useRef(false);
+  const readerRef = useRef(null);
+  const scrollTimer = useRef(null);
+
+  const saveProgress = () => {
+    const el = readerRef.current;
+    if (!el || !selected) return;
+    const rec = { id: selected.id, title: selected.title, top: el.scrollTop };
+    try {
+      localStorage.setItem("kali_reading", JSON.stringify(rec));
+    } catch (e) {}
+    onProgress && onProgress(rec);
+  };
+
+  const onReaderScroll = () => {
+    if (scrollTimer.current) return;
+    scrollTimer.current = setTimeout(() => {
+      scrollTimer.current = null;
+      saveProgress();
+    }, 400);
+  };
 
   useEffect(() => {
     if (open && letters.length === 0) {
@@ -104,6 +128,120 @@ export const LettersLibrary = ({
     if (!open) stopAudio();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // restore scroll position when reopening a letter you were reading
+  useEffect(() => {
+    if (!selected || loadingLetter) return;
+    let saved = null;
+    try {
+      saved = JSON.parse(localStorage.getItem("kali_reading") || "null");
+    } catch (e) {}
+    if (saved && saved.id === selected.id && readerRef.current) {
+      requestAnimationFrame(() => {
+        if (readerRef.current) readerRef.current.scrollTop = saved.top;
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, loadingLetter]);
+
+  const wrapCanvasText = (g, text, x, y, maxW, lh, center) => {
+    const words = text.split(/\s+/);
+    let line = "";
+    let yy = y;
+    for (const w of words) {
+      const test = line ? line + " " + w : w;
+      if (g.measureText(test).width > maxW && line) {
+        g.fillText(line, x, yy);
+        line = w;
+        yy += lh;
+      } else {
+        line = test;
+      }
+    }
+    if (line) g.fillText(line, x, yy);
+    return yy;
+  };
+
+  const makeCard = (letter) =>
+    new Promise((resolve) => {
+      const c = document.createElement("canvas");
+      c.width = 1080;
+      c.height = 1350;
+      const g = c.getContext("2d");
+      g.fillStyle = "#050505";
+      g.fillRect(0, 0, 1080, 1350);
+      g.strokeStyle = "rgba(245,158,11,0.35)";
+      g.lineWidth = 2;
+      g.strokeRect(48, 48, 984, 1254);
+      g.textAlign = "center";
+      g.fillStyle = "#f59e0b";
+      g.font = '700 96px "Rozha One", Georgia, serif';
+      g.fillText("काली", 540, 210);
+      g.fillStyle = "#a98b4b";
+      g.font = '500 22px "JetBrains Mono", monospace';
+      g.fillText("L E T T E R S   T O   H U M A N I T Y", 540, 258);
+      g.fillStyle = "rgba(245,158,11,0.5)";
+      g.font = '400 20px "JetBrains Mono", monospace';
+      g.fillText(letter.id, 540, 330);
+      g.fillStyle = "#fbbf24";
+      g.font = '700 58px "Cinzel", Georgia, serif';
+      wrapCanvasText(g, letter.title, 540, 450, 860, 70, true);
+      g.fillStyle = "#d4d4d8";
+      g.textAlign = "left";
+      g.font = '300 30px Georgia, serif';
+      const excerpt =
+        letter.body.replace("Beloved humanity,", "").trim().slice(0, 300) + "…";
+      wrapCanvasText(g, excerpt, 120, 760, 840, 46);
+      g.fillStyle = "#f59e0b";
+      g.textAlign = "center";
+      g.font = '400 40px "Rozha One", serif';
+      g.fillText("॥ ॐ ॥", 540, 1180);
+      g.fillStyle = "#8a8a8a";
+      g.font = '400 22px "JetBrains Mono", monospace';
+      g.fillText("kali.mahakalistudios.com", 540, 1250);
+      c.toBlob((b) => resolve(b), "image/png");
+    });
+
+  const shareLetter = async (letter) => {
+    const link = `${window.location.origin}/?letter=${letter.id}`;
+    let blob = null;
+    try {
+      blob = await makeCard(letter);
+    } catch (e) {}
+    const file = blob ? new File([blob], `${letter.id}.png`, { type: "image/png" }) : null;
+    try {
+      if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: letter.title,
+          text: `A letter from Kali — ${letter.title}`,
+        });
+        return;
+      }
+      if (navigator.share) {
+        await navigator.share({
+          title: letter.title,
+          text: `A letter from Kali — ${letter.title}`,
+          url: link,
+        });
+        return;
+      }
+    } catch (e) {
+      if (e.name === "AbortError") return;
+    }
+    try {
+      await navigator.clipboard.writeText(link);
+      toast("Link to this letter copied.", { className: "font-mono-kali" });
+    } catch (e) {}
+    if (blob) {
+      const u = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = u;
+      a.download = `${letter.id}.png`;
+      a.click();
+      URL.revokeObjectURL(u);
+    }
+  };
 
   const playSequence = async (chunks, mode) => {
     stopExternal && stopExternal();
@@ -268,40 +406,58 @@ export const LettersLibrary = ({
                     <Loader2 className="animate-spin text-amber-500/60" />
                   </div>
                 ) : (
-                  <div className="max-w-3xl mx-auto divide-y divide-white/[0.04]">
-                    {filtered.map((l) => (
+                  <div className="max-w-3xl mx-auto">
+                    {tab === "saved" && user && filtered.length > 0 && (
                       <button
-                        key={l.id}
-                        data-testid={`letter-item-${l.number}`}
-                        onClick={() => openLetter(l.id)}
-                        className="group w-full flex items-baseline gap-4 py-4 text-left hover:pl-2 transition-all"
+                        data-testid="verse-from-saved-btn"
+                        onClick={() =>
+                          onVerseFromSaved &&
+                          onVerseFromSaved(filtered.map((l) => l.title))
+                        }
+                        className="w-full mb-4 inline-flex items-center justify-center gap-2 rounded-xl border border-amber-500/25 hover:border-amber-500/50 bg-amber-500/[0.04] hover:bg-amber-500/[0.08] py-3 text-[11px] uppercase tracking-[0.25em] font-mono-kali text-amber-200/80 hover:text-amber-200 transition-colors"
                       >
-                        <span className="font-mono-kali text-xs text-amber-500/40 w-10 shrink-0 tabular-nums">
-                          {String(l.number).padStart(3, "0")}
-                        </span>
-                        <span className="font-cinzel text-base sm:text-lg text-zinc-300 group-hover:text-amber-300 transition-colors flex-1">
-                          {l.title}
-                        </span>
-                        {savedSet.has(l.id) && (
-                          <BookmarkCheck size={14} className="text-amber-500/60 shrink-0" />
-                        )}
+                        <Wand2 size={15} /> Weave these into a closing blessing
                       </button>
-                    ))}
-                    {filtered.length === 0 && (
-                      <p className="text-center text-zinc-600 py-20 font-mono-kali text-sm">
-                        {tab === "saved"
-                          ? user
-                            ? "No saved letters yet. Open a letter and tap the bookmark."
-                            : "Sign in to keep letters on your altar."
-                          : "No letters match that search."}
-                      </p>
                     )}
+                    <div className="divide-y divide-white/[0.04]">
+                      {filtered.map((l) => (
+                        <button
+                          key={l.id}
+                          data-testid={`letter-item-${l.number}`}
+                          onClick={() => openLetter(l.id)}
+                          className="group w-full flex items-baseline gap-4 py-4 text-left hover:pl-2 transition-all"
+                        >
+                          <span className="font-mono-kali text-xs text-amber-500/40 w-10 shrink-0 tabular-nums">
+                            {String(l.number).padStart(3, "0")}
+                          </span>
+                          <span className="font-cinzel text-base sm:text-lg text-zinc-300 group-hover:text-amber-300 transition-colors flex-1">
+                            {l.title}
+                          </span>
+                          {savedSet.has(l.id) && (
+                            <BookmarkCheck size={14} className="text-amber-500/60 shrink-0" />
+                          )}
+                        </button>
+                      ))}
+                      {filtered.length === 0 && (
+                        <p className="text-center text-zinc-600 py-20 font-mono-kali text-sm">
+                          {tab === "saved"
+                            ? user
+                              ? "No saved letters yet. Open a letter and tap the bookmark."
+                              : "Sign in to keep letters on your altar."
+                            : "No letters match that search."}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
             </div>
           ) : (
-            <div className="kali-scroll flex-1 overflow-y-auto px-5 sm:px-8 py-8">
+            <div
+              ref={readerRef}
+              onScroll={onReaderScroll}
+              className="kali-scroll flex-1 overflow-y-auto px-5 sm:px-8 py-8"
+            >
               {loadingLetter ? (
                 <div className="flex justify-center py-20">
                   <Loader2 className="animate-spin text-amber-500/60" />
@@ -374,6 +530,14 @@ export const LettersLibrary = ({
                       className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.25em] font-mono-kali text-zinc-500 hover:text-amber-300 transition-colors"
                     >
                       <Sparkles size={13} /> distil to a verse
+                    </button>
+
+                    <button
+                      data-testid="letter-share-btn"
+                      onClick={() => shareLetter(selected)}
+                      className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.25em] font-mono-kali text-zinc-500 hover:text-amber-300 transition-colors"
+                    >
+                      <Share2 size={13} /> share
                     </button>
                   </div>
 

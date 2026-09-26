@@ -35,7 +35,13 @@ A responsive devotional conversation web app (kali.mahakalistudios.com) evoking 
 
 ## Implemented (iteration 4 — 2026-06-26)
 - **Autoplay Verse**: menu toggle (persisted in localStorage). When enabled, each completed streamed verse is automatically read aloud (transliteration + English) via ElevenLabs. Verified — exactly one TTS call fires per completed verse; toggling off stops playback.
-- **Kali's Letters to Humanity**: the full 400-letter corpus (MT-KALI-0001 → 0400) parsed from the 8 supplied PDFs into `backend/data/letters.json`, seeded into MongoDB (`db.letters`, idempotent on startup). New endpoints `GET /api/letters` and `GET /api/letters/{id}`. Frontend "Letters to Humanity" library (menu) with searchable 400-title index and an elegant reader (Cinzel headings, spaced prose, auto-detected subheadings) plus a "hear the opening" TTS button. Verified: 400 items listed, search works, reader renders full letters.
+- **Kali's Letters to Humanity**: the full 400-letter corpus (MT-KALI-0001 → 0400) parsed from the 8 supplied PDFs into `backend/data/letters.json`, seeded into MongoDB (`db.letters`, idempotent on startup). New endpoints `GET /api/letters` and `GET /api/letters/{id}`. Frontend "Letters to Humanity" library (menu) with searchable 400-title index and an elegant reader plus a "hear the opening" TTS button.
+
+## Implemented (iteration 5 — 2026-06-26)
+- **Letter Autoplay (read in full)**: the reader can read an entire letter aloud, chunked by paragraph (~620-char chunks) and played sequentially through ElevenLabs, with a live "reading X/Y — stop" control. Verified via the shared TTS path.
+- **Daily Letter**: `GET /api/letters/daily` returns a deterministic letter for the current UTC date. A "☾ Today's Letter — {title}" invitation appears on the entry screen and a "Today's Letter" button sits in the library header (auto-opens that letter). Verified (today = MT-KALI-0286).
+- **Save a Letter**: signed-in seekers bookmark letters to their altar. Endpoints `GET/POST/DELETE /api/auth/saved-letters[/{id}]` (collection `db.saved_letters`, unique per user+letter, removed on account deletion). Reader has a save/saved toggle; library has an "All / Saved" tab; anonymous users are prompted to sign in. Verified end-to-end.
+- **Letter to Verse**: a "distil to a verse" button on any letter closes the library, opens the chat, and asks Kali to distil that letter into a short Sanskrit verse + English meaning (streams in the normal devotional format). Verified (chat request fires, library closes).
 
 ## Backlog
 - **P1:** Opt-in saved history with authentication + deletion; multilingual output + transliteration; qualified Sanskrit reviewer sign-off on launch samples.

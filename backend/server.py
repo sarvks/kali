@@ -339,6 +339,7 @@ async def ensure_indexes():
     await db.users.create_index("email", unique=True)
     await db.password_resets.create_index("expires_at", expireAfterSeconds=0)
     await db.password_resets.create_index("token_hash")
+    await db.saved_letters.create_index([("user_id", 1), ("letter_id", 1)], unique=True)
 
 
 async def check_rate_limit(key: str) -> bool:
@@ -375,6 +376,17 @@ async def list_letters():
         {}, {"_id": 0, "id": 1, "number": 1, "title": 1}
     ).sort("number", 1).to_list(1000)
     return {"count": len(docs), "letters": docs}
+
+
+@api_router.get("/letters/daily")
+async def daily_letter():
+    count = await db.letters.count_documents({})
+    if not count:
+        raise HTTPException(status_code=404, detail="The archive is empty.")
+    ordinal = datetime.now(timezone.utc).date().toordinal()
+    num = (ordinal % count) + 1
+    doc = await db.letters.find_one({"number": num}, {"_id": 0})
+    return doc
 
 
 @api_router.get("/letters/{letter_id}")
@@ -462,9 +474,42 @@ async def claim_thread(req: ClaimRequest, user: dict = Depends(require_user)):
 @api_router.delete("/auth/account")
 async def delete_account(response: Response, user: dict = Depends(require_user)):
     await db.messages.delete_many({"token": acct_key(user)})
+    await db.saved_letters.delete_many({"user_id": user["id"]})
     await db.users.delete_one({"_id": ObjectId(user["id"])})
     await db.password_resets.delete_many({"user_id": user["id"]})
     response.delete_cookie("access_token", path="/")
+    return {"ok": True}
+
+
+@api_router.get("/auth/saved-letters")
+async def get_saved_letters(user: dict = Depends(require_user)):
+    docs = await db.saved_letters.find({"user_id": user["id"]}).sort("created_at", -1).to_list(1000)
+    ids = [d["letter_id"] for d in docs]
+    if not ids:
+        return {"letters": [], "ids": []}
+    letters = await db.letters.find(
+        {"id": {"$in": ids}}, {"_id": 0, "id": 1, "number": 1, "title": 1}
+    ).to_list(1000)
+    order = {lid: i for i, lid in enumerate(ids)}
+    letters.sort(key=lambda l: order.get(l["id"], 9999))
+    return {"letters": letters, "ids": ids}
+
+
+@api_router.post("/auth/saved-letters/{letter_id}")
+async def save_letter(letter_id: str, user: dict = Depends(require_user)):
+    if not await db.letters.find_one({"id": letter_id}):
+        raise HTTPException(status_code=404, detail="That letter is not in the archive.")
+    await db.saved_letters.update_one(
+        {"user_id": user["id"], "letter_id": letter_id},
+        {"$setOnInsert": {"created_at": datetime.now(timezone.utc)}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api_router.delete("/auth/saved-letters/{letter_id}")
+async def unsave_letter(letter_id: str, user: dict = Depends(require_user)):
+    await db.saved_letters.delete_many({"user_id": user["id"], "letter_id": letter_id})
     return {"ok": True}
 
 

@@ -61,6 +61,12 @@ export async function fetchLetter(id) {
   return res.json();
 }
 
+export async function fetchDailyLetter() {
+  const res = await fetch(`${API}/letters/daily`);
+  if (!res.ok) return null;
+  return res.json();
+}
+
 export async function ttsGenerate(text) {
   const res = await fetch(`${API}/tts/generate`, {
     method: "POST",

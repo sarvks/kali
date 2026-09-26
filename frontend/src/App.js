@@ -21,6 +21,7 @@ import {
   ttsGenerate,
   parseReply,
   transliterate,
+  fetchDailyLetter,
 } from "./lib/api";
 import {
   authMe,
@@ -29,6 +30,9 @@ import {
   loadAuthThread,
   clearAuthThread,
   deleteAccount,
+  getSavedLetters,
+  saveLetter,
+  unsaveLetter,
 } from "./lib/auth";
 
 const prefersReduced =
@@ -51,6 +55,9 @@ function App() {
   const [selectedStar, setSelectedStar] = useState(null);
   const [speaking, setSpeaking] = useState(null); // { id, state }
   const [showLetters, setShowLetters] = useState(false);
+  const [dailyLetter, setDailyLetter] = useState(null);
+  const [savedIds, setSavedIds] = useState([]);
+  const [autoOpenLetterId, setAutoOpenLetterId] = useState(null);
   const [autoplayOn, setAutoplayOn] = useState(
     () => localStorage.getItem("kali_autoplay") === "1"
   );
@@ -75,9 +82,11 @@ function App() {
   // initial load: check account, else anon thread
   useEffect(() => {
     (async () => {
+      fetchDailyLetter().then(setDailyLetter);
       const u = await authMe();
       if (u) {
         setUser(u);
+        getSavedLetters().then((d) => setSavedIds(d.ids || []));
         const msgs = await loadAuthThread();
         setMessages(msgs);
         if (msgs.length) setActivated(true);
@@ -287,6 +296,7 @@ function App() {
   const handleAuthed = async (u) => {
     setUser(u);
     setShowAuth(false);
+    getSavedLetters().then((d) => setSavedIds(d.ids || []));
     // migrate the anonymous thread into the account
     try {
       const res = await claimThread(token);
@@ -301,9 +311,43 @@ function App() {
     });
   };
 
+  const handleToggleSave = async (id, isSaved) => {
+    try {
+      if (isSaved) {
+        await unsaveLetter(id);
+        setSavedIds((ids) => ids.filter((x) => x !== id));
+        toast("Removed from your altar.", { className: "font-mono-kali" });
+      } else {
+        await saveLetter(id);
+        setSavedIds((ids) => [id, ...ids.filter((x) => x !== id)]);
+        toast("Letter kept on your altar.", { className: "font-mono-kali" });
+      }
+    } catch (e) {
+      toast.error("Could not update your saved letters.");
+    }
+  };
+
+  const handleLetterToVerse = (letter) => {
+    setShowLetters(false);
+    setActivated(true);
+    const essence = letter.body
+      .replace(/^Beloved[^\n]*\n\n/, "")
+      .slice(0, 320)
+      .trim();
+    const msg = `Distil this letter of yours into a single short Sanskrit verse with its English meaning — "${letter.title}". Its essence: ${essence}`;
+    setTimeout(() => handleSend(msg), 250);
+  };
+
+  const openDailyLetter = () => {
+    if (!dailyLetter) return;
+    setAutoOpenLetterId(dailyLetter.id);
+    setShowLetters(true);
+  };
+
   const handleSignOut = async () => {
     await authLogout();
     setUser(null);
+    setSavedIds([]);
     const t = resetToken();
     setToken(t);
     setMessages([]);
@@ -314,6 +358,7 @@ function App() {
   const handleDeleteAltar = async () => {
     await deleteAccount();
     setUser(null);
+    setSavedIds([]);
     const t = resetToken();
     setToken(t);
     setMessages([]);
@@ -411,14 +456,30 @@ function App() {
         <div className="absolute inset-0 z-20 flex flex-col justify-end pointer-events-none">
           <div className="flex-1 flex items-center justify-center overflow-hidden px-4 pt-20 pointer-events-auto">
             {messages.length === 0 && !streaming ? (
-              <p className="max-w-md text-center text-zinc-400 font-light leading-relaxed fade-up">
-                <span className="font-devanagari text-3xl text-amber-400 block mb-4">
-                  आगच्छ
-                </span>
-                Ask, and I will answer in Sanskrit — with a quieter word beneath
-                it. Speak of time, fear, or what you must release. Tap a star to
-                learn its name.
-              </p>
+              <div className="max-w-md text-center fade-up">
+                <p className="text-zinc-400 font-light leading-relaxed">
+                  <span className="font-devanagari text-3xl text-amber-400 block mb-4">
+                    आगच्छ
+                  </span>
+                  Ask, and I will answer in Sanskrit — with a quieter word
+                  beneath it. Speak of time, fear, or what you must release. Tap
+                  a star to learn its name.
+                </p>
+                {dailyLetter && (
+                  <button
+                    data-testid="daily-letter-entry"
+                    onClick={openDailyLetter}
+                    className="mt-8 inline-flex flex-col items-center gap-1 group"
+                  >
+                    <span className="text-[10px] uppercase tracking-[0.3em] text-amber-500/50 font-mono-kali group-hover:text-amber-400/80 transition-colors">
+                      ☾ Today's Letter
+                    </span>
+                    <span className="font-cinzel text-lg text-amber-300/80 group-hover:text-amber-300 border-b border-amber-500/20 group-hover:border-amber-500/50 pb-0.5 transition-colors">
+                      {dailyLetter.title}
+                    </span>
+                  </button>
+                )}
+              </div>
             ) : (
               <DevotionalStream
                 messages={messages}
@@ -453,8 +514,14 @@ function App() {
       <LettersLibrary
         open={showLetters}
         onClose={() => setShowLetters(false)}
-        onSpeak={handleSpeak}
-        speaking={speaking}
+        user={user}
+        savedIds={savedIds}
+        onToggleSave={handleToggleSave}
+        onSignInPrompt={() => setShowAuth(true)}
+        onLetterToVerse={handleLetterToVerse}
+        stopExternal={stopTts}
+        autoOpenId={autoOpenLetterId}
+        onConsumedAutoOpen={() => setAutoOpenLetterId(null)}
       />
       <Toaster
         theme="dark"

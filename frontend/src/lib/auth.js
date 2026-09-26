@@ -34,6 +34,28 @@ export const forgotPassphrase = (email) => post("/auth/forgot", { email });
 export const resetPassphrase = (token, password) =>
   post("/auth/reset", { token, password });
 
+export async function getSavedLetters() {
+  const res = await fetch(`${API}/auth/saved-letters`, { credentials: "include" });
+  if (!res.ok) return { letters: [], ids: [] };
+  return res.json();
+}
+
+export async function saveLetter(id) {
+  const res = await fetch(`${API}/auth/saved-letters/${id}`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Could not save this letter.");
+  return res.json();
+}
+
+export async function unsaveLetter(id) {
+  await fetch(`${API}/auth/saved-letters/${id}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+}
+
 export async function authMe() {
   const res = await fetch(`${API}/auth/me`, { credentials: "include" });
   if (!res.ok) return null;

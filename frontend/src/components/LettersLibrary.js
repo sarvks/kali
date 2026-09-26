@@ -1,25 +1,78 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, ArrowLeft, Volume2, Loader2, Square, Search } from "lucide-react";
-import { fetchLetters, fetchLetter } from "../lib/api";
+import { toast } from "sonner";
+import {
+  X,
+  ArrowLeft,
+  Volume2,
+  Loader2,
+  Square,
+  Search,
+  Bookmark,
+  BookmarkCheck,
+  Sparkles,
+  Sun,
+  PlayCircle,
+} from "lucide-react";
+import { fetchLetters, fetchLetter, fetchDailyLetter, ttsGenerate } from "../lib/api";
 
-export const LettersLibrary = ({ open, onClose, onSpeak, speaking }) => {
+function chunkText(text, size = 620) {
+  const paras = text.split("\n\n");
+  const chunks = [];
+  let cur = "";
+  const pushLong = () => {
+    while (cur.length > size) {
+      let cut = cur.lastIndexOf(". ", size);
+      if (cut < 200) cut = size;
+      chunks.push(cur.slice(0, cut + 1).trim());
+      cur = cur.slice(cut + 1);
+    }
+  };
+  for (const p of paras) {
+    if (cur && (cur + " " + p).length > size) {
+      chunks.push(cur.trim());
+      cur = p;
+    } else {
+      cur = cur ? cur + "\n\n" + p : p;
+    }
+    pushLong();
+  }
+  if (cur.trim()) chunks.push(cur.trim());
+  return chunks;
+}
+
+export const LettersLibrary = ({
+  open,
+  onClose,
+  user,
+  savedIds = [],
+  onToggleSave,
+  onSignInPrompt,
+  onLetterToVerse,
+  stopExternal,
+  autoOpenId,
+  onConsumedAutoOpen,
+}) => {
   const [letters, setLetters] = useState([]);
   const [query, setQuery] = useState("");
+  const [tab, setTab] = useState("all"); // all | saved
   const [selected, setSelected] = useState(null);
   const [loadingList, setLoadingList] = useState(false);
   const [loadingLetter, setLoadingLetter] = useState(false);
+  const [player, setPlayer] = useState({ state: "idle", mode: null, index: 0, total: 0 });
+
+  const audioRef = useRef(null);
+  const cancelRef = useRef(false);
 
   useEffect(() => {
     if (open && letters.length === 0) {
       setLoadingList(true);
-      fetchLetters()
-        .then(setLetters)
-        .finally(() => setLoadingList(false));
+      fetchLetters().then(setLetters).finally(() => setLoadingList(false));
     }
   }, [open, letters.length]);
 
   const openLetter = async (id) => {
+    stopAudio();
     setLoadingLetter(true);
     try {
       const l = await fetchLetter(id);
@@ -29,7 +82,84 @@ export const LettersLibrary = ({ open, onClose, onSpeak, speaking }) => {
     }
   };
 
-  const filtered = letters.filter((l) => {
+  // auto-open (e.g. Today's Letter)
+  useEffect(() => {
+    if (open && autoOpenId) {
+      openLetter(autoOpenId);
+      onConsumedAutoOpen && onConsumedAutoOpen();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, autoOpenId]);
+
+  const stopAudio = () => {
+    cancelRef.current = true;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setPlayer({ state: "idle", mode: null, index: 0, total: 0 });
+  };
+
+  useEffect(() => {
+    if (!open) stopAudio();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const playSequence = async (chunks, mode) => {
+    stopExternal && stopExternal();
+    stopAudio();
+    cancelRef.current = false;
+    for (let i = 0; i < chunks.length; i++) {
+      if (cancelRef.current) return;
+      setPlayer({ state: "loading", mode, index: i, total: chunks.length });
+      let url;
+      try {
+        url = await ttsGenerate(chunks[i]);
+      } catch (e) {
+        toast.error(e.message || "Her voice could not be summoned.");
+        stopAudio();
+        return;
+      }
+      if (cancelRef.current) return;
+      await new Promise((resolve) => {
+        const a = new Audio(url);
+        audioRef.current = a;
+        a.onended = resolve;
+        a.onerror = resolve;
+        setPlayer({ state: "playing", mode, index: i, total: chunks.length });
+        a.play().catch(resolve);
+      });
+    }
+    if (!cancelRef.current) setPlayer({ state: "idle", mode: null, index: 0, total: 0 });
+  };
+
+  const playOpening = () => {
+    if (player.mode === "opening") return stopAudio();
+    playSequence([`${selected.title}. ${selected.body.slice(0, 700)}`], "opening");
+  };
+
+  const playFull = () => {
+    if (player.mode === "full") return stopAudio();
+    playSequence(chunkText(`${selected.title}.\n\n${selected.body}`), "full");
+  };
+
+  const openDaily = async () => {
+    const d = await fetchDailyLetter();
+    if (d) openLetter(d.id);
+  };
+
+  const handleBookmark = () => {
+    if (!user) {
+      toast("Sign in to keep this letter on your altar.", { className: "font-mono-kali" });
+      onSignInPrompt && onSignInPrompt();
+      return;
+    }
+    onToggleSave && onToggleSave(selected.id, savedIds.includes(selected.id));
+  };
+
+  const savedSet = new Set(savedIds);
+  const base = tab === "saved" ? letters.filter((l) => savedSet.has(l.id)) : letters;
+  const filtered = base.filter((l) => {
     const q = query.trim().toLowerCase();
     if (!q) return true;
     return (
@@ -39,8 +169,7 @@ export const LettersLibrary = ({ open, onClose, onSpeak, speaking }) => {
     );
   });
 
-  const speakState =
-    selected && speaking?.id === `letter-${selected.id}` ? speaking.state : "idle";
+  const isSaved = selected && savedSet.has(selected.id);
 
   return (
     <AnimatePresence>
@@ -52,13 +181,15 @@ export const LettersLibrary = ({ open, onClose, onSpeak, speaking }) => {
           exit={{ opacity: 0 }}
           data-testid="letters-library"
         >
-          {/* header */}
           <div className="flex items-center justify-between px-5 sm:px-8 py-5 border-b border-amber-500/10 shrink-0">
             <div className="flex items-center gap-4">
               {selected && (
                 <button
                   data-testid="letter-back-btn"
-                  onClick={() => setSelected(null)}
+                  onClick={() => {
+                    stopAudio();
+                    setSelected(null);
+                  }}
                   className="text-zinc-400 hover:text-amber-300 transition-colors"
                   aria-label="Back to letters"
                 >
@@ -72,20 +203,29 @@ export const LettersLibrary = ({ open, onClose, onSpeak, speaking }) => {
                 </p>
               </div>
             </div>
-            <button
-              data-testid="letters-close-btn"
-              onClick={onClose}
-              className="text-zinc-400 hover:text-amber-300 transition-colors"
-              aria-label="Close"
-            >
-              <X size={22} />
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                data-testid="daily-letter-btn"
+                onClick={openDaily}
+                className="hidden sm:inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] font-mono-kali text-amber-200/70 hover:text-amber-300 border border-amber-500/20 hover:border-amber-500/40 rounded-full px-3 py-1.5 transition-colors"
+              >
+                <Sun size={13} /> Today's Letter
+              </button>
+              <button
+                data-testid="letters-close-btn"
+                onClick={onClose}
+                className="text-zinc-400 hover:text-amber-300 transition-colors"
+                aria-label="Close"
+              >
+                <X size={22} />
+              </button>
+            </div>
           </div>
 
           {!selected ? (
             <div className="flex-1 overflow-hidden flex flex-col">
-              <div className="px-5 sm:px-8 py-4 shrink-0">
-                <div className="relative max-w-lg">
+              <div className="px-5 sm:px-8 py-4 shrink-0 flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="relative flex-1 max-w-lg">
                   <Search
                     size={15}
                     className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600"
@@ -98,6 +238,29 @@ export const LettersLibrary = ({ open, onClose, onSpeak, speaking }) => {
                     className="w-full bg-zinc-950/70 border border-white/10 focus:border-amber-500/40 rounded-full pl-9 pr-4 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none transition-colors"
                   />
                 </div>
+                <div className="flex gap-1 p-1 rounded-full bg-white/5 w-fit">
+                  {["all", "saved"].map((t) => (
+                    <button
+                      key={t}
+                      data-testid={`letters-tab-${t}`}
+                      onClick={() => setTab(t)}
+                      className={`px-4 py-1.5 rounded-full text-[10px] uppercase tracking-[0.2em] font-mono-kali transition-colors ${
+                        tab === t
+                          ? "bg-amber-500/20 text-amber-200"
+                          : "text-zinc-500 hover:text-amber-300"
+                      }`}
+                    >
+                      {t === "all" ? "All" : "Saved"}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  data-testid="daily-letter-btn-mobile"
+                  onClick={openDaily}
+                  className="sm:hidden inline-flex items-center justify-center gap-2 text-[10px] uppercase tracking-[0.2em] font-mono-kali text-amber-200/70 border border-amber-500/20 rounded-full px-3 py-2 transition-colors"
+                >
+                  <Sun size={13} /> Today's Letter
+                </button>
               </div>
               <div className="kali-scroll flex-1 overflow-y-auto px-5 sm:px-8 pb-10">
                 {loadingList ? (
@@ -106,7 +269,7 @@ export const LettersLibrary = ({ open, onClose, onSpeak, speaking }) => {
                   </div>
                 ) : (
                   <div className="max-w-3xl mx-auto divide-y divide-white/[0.04]">
-                    {filtered.map((l, i) => (
+                    {filtered.map((l) => (
                       <button
                         key={l.id}
                         data-testid={`letter-item-${l.number}`}
@@ -116,14 +279,21 @@ export const LettersLibrary = ({ open, onClose, onSpeak, speaking }) => {
                         <span className="font-mono-kali text-xs text-amber-500/40 w-10 shrink-0 tabular-nums">
                           {String(l.number).padStart(3, "0")}
                         </span>
-                        <span className="font-cinzel text-base sm:text-lg text-zinc-300 group-hover:text-amber-300 transition-colors">
+                        <span className="font-cinzel text-base sm:text-lg text-zinc-300 group-hover:text-amber-300 transition-colors flex-1">
                           {l.title}
                         </span>
+                        {savedSet.has(l.id) && (
+                          <BookmarkCheck size={14} className="text-amber-500/60 shrink-0" />
+                        )}
                       </button>
                     ))}
                     {filtered.length === 0 && (
                       <p className="text-center text-zinc-600 py-20 font-mono-kali text-sm">
-                        No letters match that search.
+                        {tab === "saved"
+                          ? user
+                            ? "No saved letters yet. Open a letter and tap the bookmark."
+                            : "Sign in to keep letters on your altar."
+                          : "No letters match that search."}
                       </p>
                     )}
                   </div>
@@ -153,29 +323,60 @@ export const LettersLibrary = ({ open, onClose, onSpeak, speaking }) => {
                   >
                     {selected.title}
                   </h1>
-                  <button
-                    data-testid="letter-speak-btn"
-                    onClick={() =>
-                      onSpeak(
-                        `letter-${selected.id}`,
-                        `${selected.title}. ${selected.body.slice(0, 700)}`
-                      )
-                    }
-                    className="mb-8 inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.25em] font-mono-kali text-zinc-500 hover:text-amber-300 transition-colors"
-                  >
-                    {speakState === "loading" ? (
-                      <Loader2 size={13} className="animate-spin" />
-                    ) : speakState === "playing" ? (
-                      <Square size={13} />
-                    ) : (
-                      <Volume2 size={13} />
-                    )}
-                    {speakState === "loading"
-                      ? "summoning"
-                      : speakState === "playing"
-                      ? "silence"
-                      : "hear the opening"}
-                  </button>
+
+                  <div className="flex flex-wrap items-center gap-x-6 gap-y-3 mb-9">
+                    <button
+                      data-testid="letter-speak-btn"
+                      onClick={playOpening}
+                      className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.25em] font-mono-kali text-zinc-500 hover:text-amber-300 transition-colors"
+                    >
+                      {player.mode === "opening" && player.state === "loading" ? (
+                        <Loader2 size={13} className="animate-spin" />
+                      ) : player.mode === "opening" ? (
+                        <Square size={13} />
+                      ) : (
+                        <Volume2 size={13} />
+                      )}
+                      {player.mode === "opening" ? "silence" : "hear the opening"}
+                    </button>
+
+                    <button
+                      data-testid="letter-readfull-btn"
+                      onClick={playFull}
+                      className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.25em] font-mono-kali text-zinc-500 hover:text-amber-300 transition-colors"
+                    >
+                      {player.mode === "full" && player.state === "loading" ? (
+                        <Loader2 size={13} className="animate-spin" />
+                      ) : player.mode === "full" ? (
+                        <Square size={13} />
+                      ) : (
+                        <PlayCircle size={13} />
+                      )}
+                      {player.mode === "full"
+                        ? `reading ${player.index + 1}/${player.total} — stop`
+                        : "read in full"}
+                    </button>
+
+                    <button
+                      data-testid="letter-save-btn"
+                      onClick={handleBookmark}
+                      className={`inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.25em] font-mono-kali transition-colors ${
+                        isSaved ? "text-amber-300" : "text-zinc-500 hover:text-amber-300"
+                      }`}
+                    >
+                      {isSaved ? <BookmarkCheck size={13} /> : <Bookmark size={13} />}
+                      {isSaved ? "saved" : "save"}
+                    </button>
+
+                    <button
+                      data-testid="letter-to-verse-btn"
+                      onClick={() => onLetterToVerse && onLetterToVerse(selected)}
+                      className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.25em] font-mono-kali text-zinc-500 hover:text-amber-300 transition-colors"
+                    >
+                      <Sparkles size={13} /> distil to a verse
+                    </button>
+                  </div>
+
                   <div className="space-y-5">
                     {selected.body.split("\n\n").map((p, idx) => {
                       const isHeading =
@@ -183,10 +384,7 @@ export const LettersLibrary = ({ open, onClose, onSpeak, speaking }) => {
                         !/[.?!,]$/.test(p.trim()) &&
                         !p.startsWith("Beloved");
                       return isHeading ? (
-                        <h2
-                          key={idx}
-                          className="font-cinzel text-lg text-amber-200/80 pt-4"
-                        >
+                        <h2 key={idx} className="font-cinzel text-lg text-amber-200/80 pt-4">
                           {p}
                         </h2>
                       ) : (

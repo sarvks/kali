@@ -71,6 +71,13 @@ A responsive devotional conversation web app (kali.mahakalistudios.com) evoking 
 - **Orion removed completely**: removed the Orion star rendering + hover/click star-lore selection in `StarfieldCanvas.js` (background starfield + meteors + central golden dash remain). Removed the "Tap a star to learn its name" entry copy.
 - **Indian voice**: added ElevenLabs shared voice *Ritu Rathore - Natural Conversational* (`fTfuemKGBjYqG4ni4gw3`, Hindi female, calm) to the account and set `ELEVEN_VOICE_ID` to it. TTS verified generating audio (eleven_multilingual_v2 renders Devanagari authentically).
 
+## Four features (fork, cont.) — 2026-06
+- **Reactive Waveform**: TTS audio is routed through a Web Audio `AnalyserNode` (App.js `handleSpeak`); `VoiceWaveform.js` renders golden bars that ripple to Kali's voice beneath the speaking verse. Verified E2E.
+- **Milestone Badge**: a permanent golden ✦ (✦✦ at 30 days) appears in the sky once a streak milestone is earned (`milestonesEarned` from localStorage `kali_milestones`, `data-testid=milestone-badge`, twinkle CSS). Verified.
+- **Gift a Letter**: `POST /api/letters/gift` (anonymous-allowed, IP rate-limited) emails a chosen letter via Resend with a beautiful card + optional note; `GiftLetterModal.js` + reader "gift to a friend" button. Rejected recipients now return a clean 400 (was 502). Verified.
+- **Digest Preview**: `GET /api/letters/weekly-digest?weekday=&tz=` returns the 7 letters the weekly email will contain; shown in `ReminderModal` when Weekly is selected (`data-testid=digest-preview`). Verified.
+- Testing: `/app/test_reports/iteration_4.json` — backend 6/6, frontend 4/4; the one HIGH gift-502 bug found was fixed (clean 400) and re-verified via curl.
+
 ## Backlog
 - **P1:** Opt-in saved history with authentication + deletion; multilingual output + transliteration; qualified Sanskrit reviewer sign-off on launch samples.
 - **P2:** Voice output (spoken Kali), constellation exploration, richer soundscape.

@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 4 validated the four newly added KALI features. Backend: 6/6 new tests pass in /app/backend/tests/test_gift_and_digest.py — weekly-digest returns 7 letters w/ id+number+title, changes by weekday; gift with a fresh unique gmail address returns {ok:true}; gift with non-existent letter_id returns 404; and /letters/gift is registered BEFORE /letters/{letter_id} so no route-order collision. Frontend E2E via Playwright on the public URL confirmed: (1) Milestone badge shows a golden ✦ for '[7]' and both ✦ and ✦✦ for '[7,30]' (data-testid=milestone-badge). (2) Gift-a-Letter UI: menu → Letters to Humanity → click a letter → letter-gift-btn opens gift-letter-modal, gift-email-input/gift-fromname-input/gift-note-input are fillable, gift-send-btn triggers POST /api/letters/gift; a fresh unique gmail address gives 200 and closes the modal (verified via network trace + backend log 202). (3) Digest Preview: after login as seeker@mahakalistudios.com + KaliDivine108, opening reminder-modal, choosing reminder-freq-weekly, digest-preview appears with exactly 7 digest-preview-item entries; changing reminder-weekday-select refreshes the 7 titles. (4) Reactive Waveform: activating chat, sending 'Hello Kali Ma', clicking speak-btn on the verse (state='playing') makes voice-waveform appear directly beneath the verse with animated bars — screenshot at /app/test_reports/waveform.png; TTS request returned 200 and no console errors. Regression: chat streamed a Sanskrit (Devanagari) + English reply with no 'connection wavered' error, Letters library still opens (405 rows/buttons observed), Orion has no connecting lines. HOWEVER a real backend bug was uncovered on POST /api/letters/gift.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/letters/gift", "issue": "Unhandled exception when the email provider (integrations.emergentagent.com) rejects the recipient with HTTP 422. Handler only catches ValueError but send_email raises httpx.HTTPStatusError; the exception propagates as a 500/502 to the caller (browser sees 502 Bad Gateway, curl also sees 502). Reproduced with to_email='kalitest_ui@gmail.com' (provider 422 → 502). Fresh unique addresses like kalitest+<uuid>@gmail.com succeed with 200. The client (GiftLetterModal) shows no toast either, so from the seeker's perspective the send silently hangs.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "GET /api/letters/weekly-digest", "issue": "Underlying 400-letter seed has duplicate titles across #s (e.g. weekly preview at weekday=0 lists 'The Courage to Meet What Is' twice at positions 1 & 3). Same seed-data issue reported in iteration 3; not a regression."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "GiftLetterModal", "issue": "When the backend returns a non-2xx (e.g. the 502 above), the modal remains open with no error toast/message. giftLetter() failure should surface a user-visible error and NOT close the modal silently.", "selector": "[data-testid='gift-letter-modal']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_gift_and_digest.py",
+    "/app/test_reports/pytest/iteration_4.xml"
+  ],
+  "action_items": [
+    "Fix POST /api/letters/gift to catch httpx.HTTPStatusError (and general Exception) from send_email and return a 400/502 with a friendly message instead of an unhandled 500 → 502. Example: `except (ValueError, httpx.HTTPStatusError, Exception) as e: raise HTTPException(400, detail='We couldn\\'t reach that address. Please check the email and try again.')`.",
+    "In GiftLetterModal.js, surface API errors: catch the giftLetter() rejection, show a sonner toast('That letter could not be delivered'), and keep the modal open so the user can correct the email. Currently no error state is rendered.",
+    "(Optional/content) Revisit duplicate letter titles in the 400-letter seed (letters share titles), also noted in iteration 3."
+  ],
+  "critical_code_review_comments": [
+    "server.py gift_letter() only catches ValueError from send_email(). send_email raises httpx.HTTPStatusError on provider 422 (address rejected), which is *not* a ValueError — this makes the endpoint 500 for entirely user-recoverable input (a stale/rejected recipient). Broaden the except and translate to a 400.",
+    "GiftLetterModal.js: no visible error handling around giftLetter() Promise — a rejected fetch leaves the modal in indeterminate state with no toast. Add try/catch + toast + keep modal open on error.",
+    "Route ordering for /letters/gift vs /letters/{letter_id} is correct (verified test_gift_route_order_before_letter_id).",
+    "VoiceWaveform integration works end-to-end: TTS 200 from ElevenLabs, AudioContext resumed by the user's click on speak-btn, analyserRef.current wired to DevotionalStream, and the voice-waveform element renders while speakState==='playing' — confirmed visually beneath the verse with animated bars.",
+    "milestonesEarned localStorage bootstrap works and re-reads on reload; both single (✦) and dual (✦ + ✦✦) badges are rendered from data-testid='milestone-badge' as spec'd."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_gift_and_digest.py"
+  ],
+  "success_rate": {"backend": "100% API tests pass (6/6 new). 1 HIGH runtime bug found via UI/edge-case testing.", "frontend": "100% (all 4 new features verified E2E; 1 medium error-state bug in gift modal)"},
+  "test_credentials": "seeker@mahakalistudios.com / KaliDivine108 (used for digest-preview flow).",
+  "seed_data_creation": "None. Used ephemeral gmail addresses (kalitest+<uuid>@gmail.com) for gift tests.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Reproducing the gift 502 bug: `curl -s -o /dev/null -w '%{http_code}' -X POST $URL/api/letters/gift -H 'content-type: application/json' -d '{\"letter_id\":\"MT-KALI-0007\",\"to_email\":\"kalitest_ui@gmail.com\",\"from_name\":\"x\",\"note\":\"y\"}'` → 502. With a fresh unique local-part it's 200. Backend log shows `httpx ... POST integrations.emergentagent.com/api/v1/email/send 422 unknown` immediately preceding the crash. All four features (Milestone badge, Gift modal, Digest Preview, Reactive Waveform) render correctly in the UI when API calls succeed. For headless waveform verification, AudioContext resumes on the speak-btn click; if you see it stall, remember the test must click speak-btn (not programmatically construct an audio element). Menu button testid is minimal-menu-btn.",
+  "rca of the issue": "POST /api/letters/gift crashes with 502 whenever the Resend/Emergent email integration returns 422 for a recipient. The gift_letter handler in server.py (~L474-491) wraps send_email in `try / except ValueError` only. send_email raises httpx.HTTPStatusError('422 unknown') on provider rejection, which escapes the handler → FastAPI returns 500 → ingress rewrites to 502. Mitigation: broaden except to (ValueError, Exception) and translate to HTTPException(400, 'That address was rejected. Please verify and try again.'); add matching UX: GiftLetterModal should catch the rejection and toast the message. Only affects gift; digest-preview + waveform + milestone badge are all clean."
+}

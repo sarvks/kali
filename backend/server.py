@@ -488,6 +488,9 @@ async def gift_letter(req: GiftRequest, request: Request):
                          html=gift_letter_email_html(letter, from_name, note, link))
     except ValueError:
         raise HTTPException(status_code=400, detail="Please simplify your note and try again.")
+    except HTTPException:
+        raise HTTPException(status_code=400,
+                            detail="That address could not be reached. Please check the email and try again.")
     return {"ok": True, "message": "Your letter has been sent."}
 
 

@@ -129,6 +129,51 @@ export async function makeBlessingCard({ sanskrit, english }, styleId = "midnigh
   return toBlob(c);
 }
 
+export async function makeAltarCard(blessings, styleId = "midnight") {
+  const s = STYLES[styleId] || STYLES.midnight;
+  const items = (blessings || []).slice(0, 4);
+  const c = document.createElement("canvas");
+  c.width = 1080;
+  c.height = 1500;
+  const g = c.getContext("2d");
+  g.fillStyle = s.bg;
+  g.fillRect(0, 0, 1080, 1500);
+  g.strokeStyle = s.border;
+  g.lineWidth = 2;
+  g.strokeRect(48, 48, 984, 1404);
+  g.textAlign = "center";
+  g.fillStyle = s.accent;
+  g.font = '700 84px "Rozha One", Georgia, serif';
+  g.fillText("काली", 540, 180);
+  g.fillStyle = s.sub;
+  g.font = '500 22px "JetBrains Mono", monospace';
+  g.fillText("A N   A L T A R   O F   B L E S S I N G S", 540, 228);
+  let y = 320;
+  const slot = Math.floor((1360 - 320) / Math.max(1, items.length));
+  for (const b of items) {
+    if (b.sanskrit) {
+      g.fillStyle = s.devan;
+      g.font = '400 40px "Rozha One", "Noto Serif Devanagari", serif';
+      y = wrap(g, b.sanskrit, 540, y, 880, 56, true) + 14;
+    }
+    if (b.english) {
+      g.fillStyle = s.body;
+      g.font = 'italic 300 26px Georgia, serif';
+      y = wrap(g, b.english, 540, y, 820, 38, true) + 10;
+    }
+    g.strokeStyle = s.border;
+    g.beginPath();
+    g.moveTo(420, y);
+    g.lineTo(660, y);
+    g.stroke();
+    y += 40;
+  }
+  g.fillStyle = s.foot;
+  g.font = '400 22px "JetBrains Mono", monospace';
+  g.fillText("kali.mahakalistudios.com", 540, 1410);
+  return toBlob(c);
+}
+
 export async function shareImage(blob, { title, text, url, filename }) {
   const file = blob ? new File([blob], filename || "kali.png", { type: "image/png" }) : null;
   try {

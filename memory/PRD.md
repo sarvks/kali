@@ -56,6 +56,12 @@ A responsive devotional conversation web app (kali.mahakalistudios.com) evoking 
 - **Reminder Time**: the daily-letter email now respects each seeker's chosen local hour + auto-detected IANA timezone. The cron runs hourly (`.emergent/crons.yml` → `0 * * * *`) and emails each opted-in user once when their local hour matches (per-user idempotent via `last_reminder_sent`). Verified send at matching hour.
 - **Reading Streak**: a gentle "🔥 N-day streak" (localStorage, works anonymously) shows in the library header, incrementing on consecutive days a letter is opened. Verified.
 
+## Implemented (iteration 8 — 2026-06-26)
+- **Card Preview**: sharing a letter or blessing opens a preview modal (`ShareCardModal`) showing a live image of the chosen style; switching Midnight Gold / Ivory Scroll / Ember regenerates the preview before Share/Download. Verified.
+- **Blessing Wall**: "My blessings" has a "Share as one altar" action composing multiple kept blessings into a single tall altar card (`makeAltarCard`) via the preview modal.
+- **Streak Milestones**: reaching a 7- or 30-day reading streak shows a golden celebration modal ("✦"/"✦✦") offering a rare letter (MT-KALI-0108 / MT-KALI-0400); the streak badge gains a ✦ mark. Once-only via localStorage. Verified 7-day modal.
+- **Weekly Digest**: reminder settings now offer Daily or Weekly (with weekday); weekly sends one email listing the week's 7 letters. Cron honors per-user freq/weekday/hour/timezone (weekly idempotent within 6 days). Verified weekly send.
+
 ## Backlog
 - **P1:** Opt-in saved history with authentication + deletion; multilingual output + transliteration; qualified Sanskrit reviewer sign-off on launch samples.
 - **P2:** Voice output (spoken Kali), constellation exploration, richer soundscape.

@@ -18,7 +18,7 @@ import {
   Flame,
 } from "lucide-react";
 import { fetchLetters, fetchLetter, fetchDailyLetter, ttsGenerate } from "../lib/api";
-import { makeLetterCard, shareImage, CARD_STYLES } from "../lib/card";
+import { ShareCardModal } from "./ShareCardModal";
 
 function chunkText(text, size = 620) {
   const paras = text.split("\n\n");
@@ -55,6 +55,7 @@ export const LettersLibrary = ({
   onLetterToVerse,
   onVerseFromSaved,
   onProgress,
+  onMilestone,
   stopExternal,
   autoOpenId,
   onConsumedAutoOpen,
@@ -95,6 +96,17 @@ export const LettersLibrary = ({
     }
     localStorage.setItem("kali_streak", JSON.stringify(s));
     setStreak(s.count);
+    if (s.count === 7 || s.count === 30) {
+      let done = [];
+      try {
+        done = JSON.parse(localStorage.getItem("kali_milestones") || "[]");
+      } catch (e) {}
+      if (!done.includes(s.count)) {
+        done.push(s.count);
+        localStorage.setItem("kali_milestones", JSON.stringify(done));
+        onMilestone && onMilestone(s.count);
+      }
+    }
   };
 
   const audioRef = useRef(null);
@@ -177,23 +189,6 @@ export const LettersLibrary = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, loadingLetter]);
-
-  const shareLetter = async (letter, styleId) => {
-    const link = `${window.location.origin}/?letter=${letter.id}`;
-    let blob = null;
-    try {
-      blob = await makeLetterCard(letter, styleId);
-    } catch (e) {}
-    const result = await shareImage(blob, {
-      title: letter.title,
-      text: `A letter from Kali — ${letter.title}`,
-      url: link,
-      filename: `${letter.id}.png`,
-    });
-    if (result === "copied") toast("Link copied · card saved.", { className: "font-mono-kali" });
-    else if (result === "downloaded") toast("Card image saved.", { className: "font-mono-kali" });
-    setShareOpen(false);
-  };
 
   const playSequence = async (chunks, mode) => {
     stopExternal && stopExternal();
@@ -301,6 +296,11 @@ export const LettersLibrary = ({
                   title="Days you've read a letter"
                 >
                   <Flame size={13} className="text-amber-400" /> {streak}-day streak
+                  {streak >= 30 ? (
+                    <span className="text-amber-300">✦✦</span>
+                  ) : streak >= 7 ? (
+                    <span className="text-amber-300">✦</span>
+                  ) : null}
                 </span>
               )}
               <button
@@ -496,28 +496,11 @@ export const LettersLibrary = ({
                     <div className="relative">
                       <button
                         data-testid="letter-share-btn"
-                        onClick={() => setShareOpen((v) => !v)}
+                        onClick={() => setShareOpen(true)}
                         className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.25em] font-mono-kali text-zinc-500 hover:text-amber-300 transition-colors"
                       >
                         <Share2 size={13} /> share
                       </button>
-                      {shareOpen && (
-                        <div className="absolute left-0 bottom-full mb-2 w-44 rounded-xl bg-zinc-950/95 border border-amber-500/20 py-2 shadow-2xl shadow-black z-10">
-                          <p className="px-4 py-1 text-[9px] uppercase tracking-[0.25em] text-amber-200/40 font-mono-kali">
-                            Card style
-                          </p>
-                          {CARD_STYLES.map((st) => (
-                            <button
-                              key={st.id}
-                              data-testid={`share-style-${st.id}`}
-                              onClick={() => shareLetter(selected, st.id)}
-                              className="block w-full text-left px-4 py-2 text-xs font-mono-kali text-zinc-300 hover:text-amber-300 hover:bg-amber-500/5 transition-colors"
-                            >
-                              {st.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   </div>
 
@@ -548,6 +531,12 @@ export const LettersLibrary = ({
               )}
             </div>
           )}
+          <ShareCardModal
+            open={shareOpen && !!selected}
+            onClose={() => setShareOpen(false)}
+            kind="letter"
+            payload={selected}
+          />
         </motion.div>
       )}
     </AnimatePresence>

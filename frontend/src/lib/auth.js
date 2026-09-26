@@ -56,12 +56,12 @@ export async function unsaveLetter(id) {
   });
 }
 
-export async function setDailyReminder(enabled, hour, tz) {
+export async function setDailyReminder(enabled, hour, tz, freq, weekday) {
   const res = await fetch(`${API}/auth/daily-reminder`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ enabled, hour, tz }),
+    body: JSON.stringify({ enabled, hour, tz, freq, weekday }),
   });
   if (!res.ok) throw new Error("Could not update your reminder.");
   return res.json();

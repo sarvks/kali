@@ -14,7 +14,7 @@ import { ResetPassphraseModal } from "./components/ResetPassphraseModal";
 import { LettersLibrary } from "./components/LettersLibrary";
 import { ReminderModal } from "./components/ReminderModal";
 import { BlessingsModal } from "./components/BlessingsModal";
-import { makeBlessingCard, shareImage } from "./lib/card";
+import { ShareCardModal } from "./components/ShareCardModal";
 import {
   getToken,
   resetToken,
@@ -65,8 +65,12 @@ function App() {
   const [autoOpenLetterId, setAutoOpenLetterId] = useState(null);
   const [dailyReminderOn, setDailyReminderOn] = useState(false);
   const [reminderHour, setReminderHour] = useState(8);
+  const [reminderFreq, setReminderFreq] = useState("daily");
+  const [reminderWeekday, setReminderWeekday] = useState(0);
   const [showReminder, setShowReminder] = useState(false);
   const [showBlessings, setShowBlessings] = useState(false);
+  const [shareVerse, setShareVerse] = useState(null);
+  const [milestone, setMilestone] = useState(null);
   const [continueReading, setContinueReading] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("kali_reading") || "null");
@@ -115,6 +119,8 @@ function App() {
         setUser(u);
         setDailyReminderOn(!!u.daily_reminder);
         setReminderHour(u.reminder_hour ?? 8);
+        setReminderFreq(u.reminder_freq || "daily");
+        setReminderWeekday(u.reminder_weekday ?? 0);
         getSavedLetters().then((d) => setSavedIds(d.ids || []));
         const msgs = await loadAuthThread();
         setMessages(msgs);
@@ -327,6 +333,8 @@ function App() {
     setShowAuth(false);
     setDailyReminderOn(!!u.daily_reminder);
     setReminderHour(u.reminder_hour ?? 8);
+    setReminderFreq(u.reminder_freq || "daily");
+    setReminderWeekday(u.reminder_weekday ?? 0);
     getSavedLetters().then((d) => setSavedIds(d.ids || []));
     // migrate the anonymous thread into the account
     try {
@@ -381,14 +389,18 @@ function App() {
     setShowLetters(true);
   };
 
-  const saveReminder = async (enabled, hour, tz) => {
+  const saveReminder = async (enabled, hour, tz, freq, weekday) => {
     try {
-      await setDailyReminder(enabled, hour, tz);
+      await setDailyReminder(enabled, hour, tz, freq, weekday);
       setDailyReminderOn(enabled);
       setReminderHour(hour);
+      setReminderFreq(freq);
+      setReminderWeekday(weekday);
       toast(
         enabled
-          ? "Today's letter will reach you each morning."
+          ? freq === "weekly"
+            ? "A weekly letter digest will reach you."
+            : "Today's letter will reach you each morning."
           : "Daily letter emails silenced.",
         { className: "font-mono-kali" }
       );
@@ -411,23 +423,17 @@ function App() {
     }
   };
 
-  const handleShareVerse = async (parsed) => {
-    try {
-      const blob = await makeBlessingCard(
-        { sanskrit: parsed.sanskrit || "", english: parsed.english || "" },
-        "midnight"
-      );
-      const res = await shareImage(blob, {
-        title: "A blessing from Kali",
-        text: parsed.english || "A blessing from Kali",
-        url: window.location.origin,
-        filename: "kali-blessing.png",
-      });
-      if (res === "downloaded" || res === "copied")
-        toast("Blessing card saved.", { className: "font-mono-kali" });
-    } catch (e) {
-      toast.error("Could not create the card.");
-    }
+  const handleShareVerse = (parsed) => {
+    setShareVerse({ sanskrit: parsed.sanskrit || "", english: parsed.english || "" });
+  };
+
+  const handleMilestone = (count) => setMilestone(count);
+
+  const openRareLetter = () => {
+    const rareId = milestone >= 30 ? "MT-KALI-0400" : "MT-KALI-0108";
+    setMilestone(null);
+    setAutoOpenLetterId(rareId);
+    setShowLetters(true);
   };
 
   const handleVerseFromSaved = (titles) => {
@@ -630,6 +636,7 @@ function App() {
         onLetterToVerse={handleLetterToVerse}
         onVerseFromSaved={handleVerseFromSaved}
         onProgress={setContinueReading}
+        onMilestone={handleMilestone}
         stopExternal={stopTts}
         autoOpenId={autoOpenLetterId}
         onConsumedAutoOpen={() => setAutoOpenLetterId(null)}
@@ -639,12 +646,64 @@ function App() {
         onClose={() => setShowReminder(false)}
         initialEnabled={dailyReminderOn}
         initialHour={reminderHour}
+        initialFreq={reminderFreq}
+        initialWeekday={reminderWeekday}
         onSave={saveReminder}
       />
       <BlessingsModal
         open={showBlessings}
         onClose={() => setShowBlessings(false)}
       />
+      <ShareCardModal
+        open={!!shareVerse}
+        onClose={() => setShareVerse(null)}
+        kind="blessing"
+        payload={shareVerse}
+      />
+      <AnimatePresence>
+        {milestone && (
+          <motion.div
+            data-testid="milestone-modal"
+            className="fixed inset-0 z-[65] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md pointer-events-auto"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+              className="max-w-sm w-full rounded-2xl bg-zinc-950/95 border border-amber-500/30 p-8 text-center"
+            >
+              <p className="text-5xl mb-3 text-amber-400">{milestone >= 30 ? "✦✦" : "✦"}</p>
+              <p className="font-cinzel text-2xl text-amber-300 mb-2">
+                {milestone}-day streak
+              </p>
+              <p className="text-sm text-zinc-300 font-light leading-relaxed mb-7">
+                {milestone >= 30
+                  ? "Thirty days of returning to the light. A rare letter opens for you."
+                  : "Seven days of devotion. A rare letter opens for you."}
+              </p>
+              <div className="flex flex-col gap-3">
+                <button
+                  data-testid="milestone-open-btn"
+                  onClick={openRareLetter}
+                  className="px-8 py-2.5 rounded-full border border-amber-500/40 text-amber-200 text-xs uppercase tracking-[0.3em] font-mono-kali hover:bg-amber-500/10 transition-colors"
+                >
+                  Open the rare letter
+                </button>
+                <button
+                  data-testid="milestone-close-btn"
+                  onClick={() => setMilestone(null)}
+                  className="text-[10px] uppercase tracking-[0.2em] font-mono-kali text-zinc-600 hover:text-amber-300 transition-colors"
+                >
+                  Later
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <Toaster
         theme="dark"
         position="top-center"

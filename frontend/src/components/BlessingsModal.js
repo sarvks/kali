@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Share2, Trash2, Loader2 } from "lucide-react";
+import { X, Share2, Trash2, Loader2, LayoutGrid } from "lucide-react";
 import { getBlessings, deleteBlessing } from "../lib/auth";
-import { makeBlessingCard, shareImage, CARD_STYLES } from "../lib/card";
+import { ShareCardModal } from "./ShareCardModal";
 
 export const BlessingsModal = ({ open, onClose }) => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [shareFor, setShareFor] = useState(null);
+  const [shareItem, setShareItem] = useState(null);
+  const [shareWall, setShareWall] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -21,17 +22,6 @@ export const BlessingsModal = ({ open, onClose }) => {
   const remove = async (id) => {
     await deleteBlessing(id);
     setItems((xs) => xs.filter((x) => x.id !== id));
-  };
-
-  const share = async (b, styleId) => {
-    const blob = await makeBlessingCard({ sanskrit: b.sanskrit, english: b.english }, styleId);
-    await shareImage(blob, {
-      title: "A blessing from Kali",
-      text: b.english || "A blessing from Kali",
-      url: window.location.origin,
-      filename: "kali-blessing.png",
-    });
-    setShareFor(null);
   };
 
   return (
@@ -60,6 +50,18 @@ export const BlessingsModal = ({ open, onClose }) => {
               <X size={22} />
             </button>
           </div>
+
+          {items.length > 1 && (
+            <div className="px-5 sm:px-8 pt-4 shrink-0">
+              <button
+                data-testid="share-wall-btn"
+                onClick={() => setShareWall(true)}
+                className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] font-mono-kali text-amber-200/70 hover:text-amber-300 border border-amber-500/20 hover:border-amber-500/40 rounded-full px-4 py-2 transition-colors"
+              >
+                <LayoutGrid size={13} /> Share as one altar
+              </button>
+            </div>
+          )}
 
           <div className="kali-scroll flex-1 overflow-y-auto px-5 sm:px-8 py-8">
             {loading ? (
@@ -94,7 +96,7 @@ export const BlessingsModal = ({ open, onClose }) => {
                     <div className="mt-5 flex items-center justify-center gap-6 relative">
                       <button
                         data-testid="blessing-share-btn"
-                        onClick={() => setShareFor(shareFor === b.id ? null : b.id)}
+                        onClick={() => setShareItem(b)}
                         className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.25em] font-mono-kali text-zinc-500 hover:text-amber-300 transition-colors"
                       >
                         <Share2 size={13} /> share
@@ -106,28 +108,24 @@ export const BlessingsModal = ({ open, onClose }) => {
                       >
                         <Trash2 size={13} /> remove
                       </button>
-                      {shareFor === b.id && (
-                        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-44 rounded-xl bg-zinc-950/95 border border-amber-500/20 py-2 shadow-2xl shadow-black z-10">
-                          <p className="px-4 py-1 text-[9px] uppercase tracking-[0.25em] text-amber-200/40 font-mono-kali">
-                            Card style
-                          </p>
-                          {CARD_STYLES.map((st) => (
-                            <button
-                              key={st.id}
-                              onClick={() => share(b, st.id)}
-                              className="block w-full text-left px-4 py-2 text-xs font-mono-kali text-zinc-300 hover:text-amber-300 hover:bg-amber-500/5 transition-colors"
-                            >
-                              {st.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
+          <ShareCardModal
+            open={!!shareItem}
+            onClose={() => setShareItem(null)}
+            kind="blessing"
+            payload={shareItem}
+          />
+          <ShareCardModal
+            open={shareWall}
+            onClose={() => setShareWall(false)}
+            kind="wall"
+            payload={items}
+          />
         </motion.div>
       )}
     </AnimatePresence>

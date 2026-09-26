@@ -8,16 +8,20 @@ const fmtHour = (h) => {
   return `${hh}:00 ${period}`;
 };
 
-export const ReminderModal = ({ open, onClose, initialEnabled, initialHour, onSave }) => {
+const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+export const ReminderModal = ({ open, onClose, initialEnabled, initialHour, initialFreq, initialWeekday, onSave }) => {
   const [enabled, setEnabled] = useState(!!initialEnabled);
   const [hour, setHour] = useState(initialHour ?? 8);
+  const [freq, setFreq] = useState(initialFreq || "daily");
+  const [weekday, setWeekday] = useState(initialWeekday ?? 0);
   const [busy, setBusy] = useState(false);
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
   const save = async () => {
     setBusy(true);
     try {
-      await onSave(enabled, hour, tz);
+      await onSave(enabled, hour, tz, freq, weekday);
       onClose();
     } finally {
       setBusy(false);
@@ -74,6 +78,40 @@ export const ReminderModal = ({ open, onClose, initialEnabled, initialHour, onSa
             </label>
 
             <div className={enabled ? "opacity-100" : "opacity-40 pointer-events-none"}>
+              <p className="text-[10px] uppercase tracking-[0.25em] text-amber-200/50 font-mono-kali mb-2">
+                How often
+              </p>
+              <div className="flex gap-1 mb-5 p-1 rounded-full bg-white/5">
+                {[["daily", "Daily"], ["weekly", "Weekly"]].map(([v, label]) => (
+                  <button
+                    key={v}
+                    data-testid={`reminder-freq-${v}`}
+                    onClick={() => setFreq(v)}
+                    className={`flex-1 py-1.5 rounded-full text-[10px] uppercase tracking-[0.2em] font-mono-kali transition-colors ${
+                      freq === v ? "bg-amber-500/20 text-amber-200" : "text-zinc-500 hover:text-amber-300"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {freq === "weekly" && (
+                <>
+                  <p className="text-[10px] uppercase tracking-[0.25em] text-amber-200/50 font-mono-kali mb-2">
+                    On
+                  </p>
+                  <select
+                    data-testid="reminder-weekday-select"
+                    value={weekday}
+                    onChange={(e) => setWeekday(Number(e.target.value))}
+                    className="w-full bg-zinc-900 border border-white/10 focus:border-amber-500/40 rounded-lg px-4 py-2.5 text-sm text-zinc-100 outline-none mb-4"
+                  >
+                    {WEEKDAYS.map((d, i) => (
+                      <option key={i} value={i}>{d}</option>
+                    ))}
+                  </select>
+                </>
+              )}
               <p className="text-[10px] uppercase tracking-[0.25em] text-amber-200/50 font-mono-kali mb-2">
                 Arrives at
               </p>

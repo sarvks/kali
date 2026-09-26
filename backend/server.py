@@ -157,6 +157,8 @@ class ReminderRequest(BaseModel):
     enabled: bool
     hour: Optional[int] = None
     tz: Optional[str] = None
+    freq: Optional[str] = None       # 'daily' | 'weekly'
+    weekday: Optional[int] = None    # 0=Mon .. 6=Sun (for weekly)
 
 
 class BlessingRequest(BaseModel):
@@ -441,7 +443,8 @@ async def register(req: RegisterRequest, response: Response):
     uid = str(res.inserted_id)
     set_auth_cookie(response, create_access_token(uid, email))
     return {"id": uid, "email": email, "name": doc["name"], "daily_reminder": False,
-            "reminder_hour": 8, "reminder_tz": "UTC"}
+            "reminder_hour": 8, "reminder_tz": "UTC", "reminder_freq": "daily",
+            "reminder_weekday": 0}
 
 
 @api_router.post("/auth/login")
@@ -455,7 +458,9 @@ async def login(req: LoginRequest, response: Response):
     return {"id": uid, "email": email, "name": user.get("name", email.split("@")[0]),
             "daily_reminder": user.get("daily_reminder", False),
             "reminder_hour": user.get("reminder_hour", 8),
-            "reminder_tz": user.get("reminder_tz", "UTC")}
+            "reminder_tz": user.get("reminder_tz", "UTC"),
+            "reminder_freq": user.get("reminder_freq", "daily"),
+            "reminder_weekday": user.get("reminder_weekday", 0)}
 
 
 @api_router.post("/auth/logout")
@@ -544,6 +549,10 @@ async def set_daily_reminder(req: ReminderRequest, user: dict = Depends(require_
             update["reminder_tz"] = req.tz[:64]
         except Exception:
             pass
+    if req.freq in ("daily", "weekly"):
+        update["reminder_freq"] = req.freq
+    if req.weekday is not None:
+        update["reminder_weekday"] = max(0, min(6, int(req.weekday)))
     await db.users.update_one({"_id": ObjectId(user["id"])}, {"$set": update})
     return {"ok": True, **update}
 
@@ -608,32 +617,91 @@ async def run_daily_reminders(run_id: str):
     for u in users:
         tz_name = u.get("reminder_tz", "UTC")
         hour = int(u.get("reminder_hour", 8))
+        freq = u.get("reminder_freq", "daily")
         try:
             local = now_utc.astimezone(ZoneInfo(tz_name))
         except Exception:
             local = now_utc
         if local.hour != hour:
             continue
-        today = local.date().isoformat()
-        if u.get("last_reminder_sent") == today:
-            continue
-        num = (local.date().toordinal() % count) + 1
-        letter = await db.letters.find_one({"number": num}, {"_id": 0})
-        if not letter:
-            continue
-        link = f"{FRONTEND_URL}/?letter={letter['id']}"
-        try:
-            await send_email(
-                to=u["email"],
-                subject=f"Today's letter — {letter['title']}",
-                html=daily_letter_email_html(u.get("name", u["email"].split("@")[0]), letter, link),
-            )
-            await db.users.update_one({"_id": u["_id"]},
-                                      {"$set": {"last_reminder_sent": today}})
-            sent += 1
-        except Exception as e:  # noqa: BLE001
-            logger.error(f"daily reminder send failed for a user: {e}")
+        name = u.get("name", u["email"].split("@")[0])
+        last = u.get("last_reminder_sent")
+        if freq == "weekly":
+            if local.weekday() != int(u.get("reminder_weekday", 0)):
+                continue
+            if last:
+                try:
+                    if (local.date() - datetime.fromisoformat(last).date()).days < 6:
+                        continue
+                except Exception:
+                    pass
+            week_letters = []
+            for i in range(7):
+                d = local.date() + timedelta(days=i)
+                num = (d.toordinal() % count) + 1
+                lt = await db.letters.find_one({"number": num}, {"_id": 0, "id": 1, "title": 1})
+                if lt:
+                    week_letters.append(lt)
+            try:
+                await send_email(
+                    to=u["email"],
+                    subject="Your week of Letters from Kali",
+                    html=weekly_digest_email_html(name, week_letters),
+                )
+                await db.users.update_one({"_id": u["_id"]},
+                                          {"$set": {"last_reminder_sent": local.date().isoformat()}})
+                sent += 1
+            except Exception as e:  # noqa: BLE001
+                logger.error(f"weekly digest send failed: {e}")
+        else:
+            today = local.date().isoformat()
+            if last == today:
+                continue
+            num = (local.date().toordinal() % count) + 1
+            letter = await db.letters.find_one({"number": num}, {"_id": 0})
+            if not letter:
+                continue
+            link = f"{FRONTEND_URL}/?letter={letter['id']}"
+            try:
+                await send_email(
+                    to=u["email"],
+                    subject=f"Today's letter — {letter['title']}",
+                    html=daily_letter_email_html(name, letter, link),
+                )
+                await db.users.update_one({"_id": u["_id"]},
+                                          {"$set": {"last_reminder_sent": today}})
+                sent += 1
+            except Exception as e:  # noqa: BLE001
+                logger.error(f"daily reminder send failed for a user: {e}")
     logger.info(f"daily reminders run {run_id}: sent {sent} at {now_utc.isoformat()}")
+
+
+def weekly_digest_email_html(name: str, letters: list) -> str:
+    rows = ""
+    for lt in letters:
+        link = f"{FRONTEND_URL}/?letter={lt['id']}"
+        rows += (
+            f'<p style="margin:10px 0"><a href="{escape(link)}" '
+            'style="color:#fbbf24;text-decoration:none;font-size:16px;font-family:Georgia,serif">'
+            f'{escape(lt["title"])}</a></p>'
+        )
+    return (
+        '<table role="presentation" width="100%" style="background:#050505"><tr><td '
+        'style="padding:32px;font-family:Georgia,serif;color:#e8e8e8">'
+        '<div style="max-width:520px;margin:0 auto;background:#0b0b0d;border:1px solid '
+        '#3a2d10;border-radius:14px;padding:32px">'
+        '<p style="font-size:26px;color:#f59e0b;margin:0 0 4px;letter-spacing:2px">काली</p>'
+        '<p style="font-size:11px;letter-spacing:4px;color:#a98b4b;text-transform:uppercase;'
+        'margin:0 0 24px">Your Week of Letters</p>'
+        f'<p style="font-size:15px;line-height:1.7">Namaste {escape(name)},</p>'
+        '<p style="font-size:15px;line-height:1.7;color:#c9c9c9">Seven letters to sit with '
+        'this week, one for each day:</p>'
+        f'<div style="margin:20px 0">{rows}</div>'
+        '<p style="font-size:11px;color:#6b6b6b;margin-top:24px">Sent by Mahakali Studios '
+        'because you chose a weekly letter. Open the app menu to change this anytime. '
+        'We never ask for your passphrase by email.</p>'
+        '</div></td></tr></table>'
+    )
 
 
 @api_router.post("/cron/daily-reminder")

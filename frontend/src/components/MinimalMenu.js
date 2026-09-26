@@ -12,6 +12,9 @@ import {
   Eye,
   EyeOff,
   Square,
+  LogIn,
+  LogOut,
+  Flame,
 } from "lucide-react";
 
 const Item = ({ testid, icon: Icon, label, onClick, active }) => (
@@ -39,6 +42,10 @@ export const MinimalMenu = ({
   reducedMotion,
   onToggleMotion,
   streaming,
+  user,
+  onSignIn,
+  onSignOut,
+  onDeleteAltar,
 }) => {
   const [open, setOpen] = useState(false);
 
@@ -62,6 +69,24 @@ export const MinimalMenu = ({
             transition={{ duration: 0.2 }}
             className="absolute right-0 mt-2 w-60 rounded-xl bg-zinc-950/90 backdrop-blur-xl border border-amber-500/15 py-2 shadow-2xl shadow-black"
           >
+            <p className="px-4 py-1 text-[9px] uppercase tracking-[0.3em] text-amber-200/40 font-mono-kali">
+              Saved Altar
+            </p>
+            {user ? (
+              <>
+                <p
+                  data-testid="menu-user-email"
+                  className="px-4 pb-1 text-[10px] text-amber-200/70 font-mono-kali truncate"
+                >
+                  {user.email}
+                </p>
+                <Item testid="menu-signout-btn" icon={LogOut} label="Sign out" onClick={() => { onSignOut(); setOpen(false); }} />
+                <Item testid="menu-delete-altar-btn" icon={Flame} label="Delete saved altar" onClick={() => { onDeleteAltar(); setOpen(false); }} />
+              </>
+            ) : (
+              <Item testid="menu-signin-btn" icon={LogIn} label="Save & sync thread" onClick={() => { onSignIn(); setOpen(false); }} />
+            )}
+            <div className="my-1.5 h-px bg-white/5" />
             <p className="px-4 py-1 text-[9px] uppercase tracking-[0.3em] text-amber-200/40 font-mono-kali">
               Session
             </p>

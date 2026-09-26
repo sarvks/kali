@@ -1,19 +1,31 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import "@/App.css";
 import { Toaster, toast } from "sonner";
+import { AnimatePresence, motion } from "framer-motion";
+import { X } from "lucide-react";
 import { StarfieldCanvas } from "./components/StarfieldCanvas";
 import { CentralDash } from "./components/CentralDash";
 import { DevotionalStream } from "./components/DevotionalStream";
 import { InputPanel } from "./components/InputPanel";
 import { MinimalMenu } from "./components/MinimalMenu";
 import { MahakaliIntroModal } from "./components/MahakaliIntroModal";
+import { AuthModal } from "./components/AuthModal";
 import {
   getToken,
   resetToken,
   loadSession,
   clearSession,
   streamChat,
+  ttsGenerate,
 } from "./lib/api";
+import {
+  authMe,
+  authLogout,
+  claimThread,
+  loadAuthThread,
+  clearAuthThread,
+  deleteAccount,
+} from "./lib/auth";
 
 const prefersReduced =
   typeof window !== "undefined" &&
@@ -22,28 +34,43 @@ const prefersReduced =
 
 function App() {
   const [token, setToken] = useState(() => getToken());
+  const [user, setUser] = useState(null);
   const [messages, setMessages] = useState([]);
   const [activated, setActivated] = useState(false);
   const [showIntro, setShowIntro] = useState(false);
+  const [showAuth, setShowAuth] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState("");
   const [reducedMotion, setReducedMotion] = useState(prefersReduced);
   const [constellationOn, setConstellationOn] = useState(true);
   const [audioOn, setAudioOn] = useState(false);
+  const [selectedStar, setSelectedStar] = useState(null);
+  const [speaking, setSpeaking] = useState(null); // { id, state }
 
   const abortRef = useRef(null);
   const accRef = useRef("");
-  const audioRef = useRef(null);
+  const droneRef = useRef(null);
+  const ttsRef = useRef(null);
 
-  // load persisted thread
+  // initial load: check account, else anon thread
   useEffect(() => {
-    loadSession(token).then((msgs) => {
-      if (msgs.length) {
+    (async () => {
+      const u = await authMe();
+      if (u) {
+        setUser(u);
+        const msgs = await loadAuthThread();
         setMessages(msgs);
-        setActivated(true);
+        if (msgs.length) setActivated(true);
+      } else {
+        const msgs = await loadSession(token);
+        if (msgs.length) {
+          setMessages(msgs);
+          setActivated(true);
+        }
       }
-    });
-  }, [token]);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // mobile viewport height (keyboard-safe)
   useEffect(() => {
@@ -60,11 +87,10 @@ function App() {
     };
   }, []);
 
-  // ambient 108Hz drone
   const toggleAudio = useCallback(() => {
     if (audioOn) {
-      audioRef.current?.ctx?.close?.();
-      audioRef.current = null;
+      droneRef.current?.ctx?.close?.();
+      droneRef.current = null;
       setAudioOn(false);
       return;
     }
@@ -87,7 +113,7 @@ function App() {
         return o;
       });
       gain.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 2);
-      audioRef.current = { ctx, oscs };
+      droneRef.current = { ctx, oscs };
       setAudioOn(true);
     } catch (e) {
       toast.error("Audio unavailable on this device.");
@@ -96,9 +122,7 @@ function App() {
 
   const activate = () => {
     setActivated(true);
-    if (!localStorage.getItem("kali_intro_seen")) {
-      setShowIntro(true);
-    }
+    if (!localStorage.getItem("kali_intro_seen")) setShowIntro(true);
   };
 
   const closeIntro = () => {
@@ -121,17 +145,13 @@ function App() {
           accRef.current += chunk;
           setStreamText(accRef.current);
         },
-        onError: (msg) => {
-          toast.error(msg || "The connection wavered.");
-        },
+        onError: (msg) => toast.error(msg || "The connection wavered."),
       }).catch((e) => {
         if (e.name !== "AbortError") toast.error("The connection wavered.");
       });
 
       const final = accRef.current.trim();
-      if (final) {
-        setMessages((m) => [...m, { role: "assistant", content: final }]);
-      }
+      if (final) setMessages((m) => [...m, { role: "assistant", content: final }]);
       setStreamText("");
       setStreaming(false);
       abortRef.current = null;
@@ -142,27 +162,59 @@ function App() {
   const handleStop = () => {
     abortRef.current?.abort();
     const final = accRef.current.trim();
-    if (final) {
-      setMessages((m) => [...m, { role: "assistant", content: final }]);
-    }
+    if (final) setMessages((m) => [...m, { role: "assistant", content: final }]);
     setStreamText("");
     setStreaming(false);
   };
 
+  const stopTts = () => {
+    ttsRef.current?.pause();
+    ttsRef.current = null;
+    setSpeaking(null);
+  };
+
+  const handleSpeak = async (id, text) => {
+    if (speaking && speaking.id === id && speaking.state === "playing") {
+      stopTts();
+      return;
+    }
+    stopTts();
+    setSpeaking({ id, state: "loading" });
+    try {
+      const dataUrl = await ttsGenerate(text);
+      const audio = new Audio(dataUrl);
+      ttsRef.current = audio;
+      audio.onended = () => setSpeaking(null);
+      audio.onerror = () => setSpeaking(null);
+      await audio.play();
+      setSpeaking({ id, state: "playing" });
+    } catch (e) {
+      toast.error(e.message || "Her voice could not be summoned.");
+      setSpeaking(null);
+    }
+  };
+
   const handleReset = () => {
     abortRef.current?.abort();
-    const t = resetToken();
+    stopTts();
+    if (!user) {
+      const t = resetToken();
+      setToken(t);
+    } else {
+      clearAuthThread();
+    }
     setMessages([]);
     setStreamText("");
     setStreaming(false);
     setActivated(true);
-    setToken(t);
     toast("A new thread begins.", { className: "font-mono-kali" });
   };
 
   const handleClear = async () => {
     abortRef.current?.abort();
-    await clearSession(token);
+    stopTts();
+    if (user) await clearAuthThread();
+    else await clearSession(token);
     setMessages([]);
     setStreamText("");
     setStreaming(false);
@@ -174,9 +226,7 @@ function App() {
     const lines = messages.map((m) =>
       m.role === "user" ? `You: ${m.content}` : `Kali:\n${m.content}`
     );
-    const blob = new Blob([lines.join("\n\n———\n\n")], {
-      type: "text/plain",
-    });
+    const blob = new Blob([lines.join("\n\n———\n\n")], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -185,6 +235,45 @@ function App() {
     URL.revokeObjectURL(url);
     toast("Session exported.", { className: "font-mono-kali" });
   };
+
+  const handleAuthed = async (u) => {
+    setUser(u);
+    setShowAuth(false);
+    // migrate the anonymous thread into the account
+    try {
+      const msgs = await claimThread(token);
+      setMessages(msgs);
+    } catch (e) {
+      const msgs = await loadAuthThread();
+      setMessages(msgs);
+    }
+    setActivated(true);
+    toast("Your altar is lit. This thread now follows you.", {
+      className: "font-mono-kali",
+    });
+  };
+
+  const handleSignOut = async () => {
+    await authLogout();
+    setUser(null);
+    const t = resetToken();
+    setToken(t);
+    setMessages([]);
+    setActivated(false);
+    toast("Signed out. Anonymous once more.", { className: "font-mono-kali" });
+  };
+
+  const handleDeleteAltar = async () => {
+    await deleteAccount();
+    setUser(null);
+    const t = resetToken();
+    setToken(t);
+    setMessages([]);
+    setActivated(false);
+    toast("Your altar has been extinguished.", { className: "font-mono-kali" });
+  };
+
+  const handleStarSelect = useCallback((s) => setSelectedStar(s), []);
 
   return (
     <div
@@ -196,6 +285,7 @@ function App() {
       <StarfieldCanvas
         reducedMotion={reducedMotion}
         showConstellation={constellationOn}
+        onStarSelect={handleStarSelect}
       />
 
       {/* Top HUD */}
@@ -212,14 +302,51 @@ function App() {
           onToggleConstellation={() => setConstellationOn((v) => !v)}
           reducedMotion={reducedMotion}
           onToggleMotion={() => setReducedMotion((v) => !v)}
+          user={user}
+          onSignIn={() => setShowAuth(true)}
+          onSignOut={handleSignOut}
+          onDeleteAltar={handleDeleteAltar}
         />
       </div>
 
       <div className="absolute top-0 left-0 z-30 p-4 sm:p-6">
-        <p className="font-cinzel text-sm text-amber-300/80 font-devanagari">
-          काली
-        </p>
+        <p className="font-cinzel text-sm text-amber-300/80 font-devanagari">काली</p>
       </div>
+
+      {/* Star lore panel */}
+      <AnimatePresence>
+        {selectedStar && (
+          <motion.div
+            data-testid="star-lore-panel"
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.4 }}
+            className="absolute z-40 left-1/2 -translate-x-1/2 top-20 sm:top-24 w-[calc(100%-2rem)] max-w-sm rounded-xl bg-zinc-950/90 backdrop-blur-xl border border-amber-500/20 p-5 pointer-events-auto"
+          >
+            <button
+              data-testid="star-lore-close"
+              onClick={() => setSelectedStar(null)}
+              className="absolute top-3 right-3 text-zinc-500 hover:text-amber-300"
+              aria-label="Close"
+            >
+              <X size={16} />
+            </button>
+            <p className="text-[9px] uppercase tracking-[0.3em] text-amber-200/40 font-mono-kali mb-1">
+              Orion
+            </p>
+            <p
+              data-testid="star-lore-name"
+              className="font-cinzel text-xl text-amber-300 mb-2 tracking-wide"
+            >
+              {selectedStar.name}
+            </p>
+            <p className="text-sm text-zinc-300 font-light leading-relaxed">
+              {selectedStar.lore}
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {!activated ? (
         <CentralDash onActivate={activate} reducedMotion={reducedMotion} />
@@ -232,13 +359,16 @@ function App() {
                   आगच्छ
                 </span>
                 Ask, and I will answer in Sanskrit — with a quieter word beneath
-                it. Speak of time, fear, or what you must release.
+                it. Speak of time, fear, or what you must release. Tap a star to
+                learn its name.
               </p>
             ) : (
               <DevotionalStream
                 messages={messages}
                 streaming={streaming}
                 streamText={streamText}
+                onSpeak={handleSpeak}
+                speaking={speaking}
               />
             )}
           </div>
@@ -253,6 +383,11 @@ function App() {
       )}
 
       <MahakaliIntroModal open={showIntro} onClose={closeIntro} />
+      <AuthModal
+        open={showAuth}
+        onClose={() => setShowAuth(false)}
+        onAuthed={handleAuthed}
+      />
       <Toaster
         theme="dark"
         position="top-center"

@@ -1,8 +1,31 @@
 import { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { parseReply } from "../lib/api";
+import { Volume2, Loader2, Square } from "lucide-react";
+import { parseReply, transliterate } from "../lib/api";
 
-const Utterance = ({ sanskrit, english, guidance }) => {
+const SpeakButton = ({ onSpeak, state }) => {
+  if (!onSpeak) return null;
+  return (
+    <button
+      data-testid="speak-btn"
+      onClick={onSpeak}
+      aria-label="Hear this spoken"
+      className="mt-4 inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.25em] font-mono-kali text-zinc-500 hover:text-amber-300 transition-colors"
+    >
+      {state === "loading" ? (
+        <Loader2 size={13} className="animate-spin" />
+      ) : state === "playing" ? (
+        <Square size={13} />
+      ) : (
+        <Volume2 size={13} />
+      )}
+      {state === "loading" ? "summoning" : state === "playing" ? "silence" : "speak"}
+    </button>
+  );
+};
+
+const Utterance = ({ sanskrit, english, guidance, onSpeak, speakState }) => {
+  const iast = sanskrit ? transliterate(sanskrit) : "";
   if (guidance) {
     return (
       <div className="max-w-2xl mx-auto text-left border-l-2 border-amber-500/40 pl-5 py-1">
@@ -15,6 +38,7 @@ const Utterance = ({ sanskrit, english, guidance }) => {
         >
           {english}
         </p>
+        <SpeakButton onSpeak={onSpeak} state={speakState} />
       </div>
     );
   }
@@ -29,6 +53,14 @@ const Utterance = ({ sanskrit, english, guidance }) => {
           {sanskrit}
         </p>
       )}
+      {iast && (
+        <p
+          data-testid="transliteration-text"
+          className="mt-3 text-xs sm:text-sm text-amber-200/45 font-mono-kali italic tracking-wide whitespace-pre-wrap"
+        >
+          {iast}
+        </p>
+      )}
       {sanskrit && english && (
         <div className="mx-auto my-5 h-px w-40 bg-gradient-to-r from-transparent via-amber-500/40 to-transparent" />
       )}
@@ -40,11 +72,18 @@ const Utterance = ({ sanskrit, english, guidance }) => {
           {english}
         </p>
       )}
+      <SpeakButton onSpeak={onSpeak} state={speakState} />
     </div>
   );
 };
 
-export const DevotionalStream = ({ messages, streaming, streamText }) => {
+export const DevotionalStream = ({
+  messages,
+  streaming,
+  streamText,
+  onSpeak,
+  speaking,
+}) => {
   const endRef = useRef(null);
 
   useEffect(() => {
@@ -68,6 +107,9 @@ export const DevotionalStream = ({ messages, streaming, streamText }) => {
           );
         }
         const parsed = parseReply(m.content);
+        const speakText = parsed.guidance
+          ? parsed.english
+          : `${transliterate(parsed.sanskrit)}. ${parsed.english}`;
         return (
           <motion.div
             key={i}
@@ -75,7 +117,11 @@ export const DevotionalStream = ({ messages, streaming, streamText }) => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
           >
-            <Utterance {...parsed} />
+            <Utterance
+              {...parsed}
+              onSpeak={onSpeak ? () => onSpeak(i, speakText) : null}
+              speakState={speaking?.id === i ? speaking.state : "idle"}
+            />
           </motion.div>
         );
       })}
@@ -84,6 +130,7 @@ export const DevotionalStream = ({ messages, streaming, streamText }) => {
         <div>
           {(() => {
             const parsed = parseReply(streamText);
+            const iast = parsed.sanskrit ? transliterate(parsed.sanskrit) : "";
             return (
               <div className="max-w-2xl mx-auto text-center">
                 {parsed.guidance ? (
@@ -96,6 +143,11 @@ export const DevotionalStream = ({ messages, streaming, streamText }) => {
                         className="font-devanagari text-2xl sm:text-3xl lg:text-4xl text-amber-400 leading-relaxed tracking-wide whitespace-pre-wrap drop-shadow-[0_0_14px_rgba(245,158,11,0.28)]"
                       >
                         {parsed.sanskrit}
+                      </p>
+                    )}
+                    {iast && (
+                      <p className="mt-3 text-xs sm:text-sm text-amber-200/45 font-mono-kali italic tracking-wide whitespace-pre-wrap">
+                        {iast}
                       </p>
                     )}
                     {parsed.sanskrit && parsed.english && (

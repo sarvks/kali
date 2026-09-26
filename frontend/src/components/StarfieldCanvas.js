@@ -36,9 +36,21 @@ function mulberry32(a) {
   };
 }
 
-export const StarfieldCanvas = ({ reducedMotion, showConstellation }) => {
+const ORION_LORE = {
+  meissa: { name: "Meissa", lore: "The head of the hunter — a faint double star, a mind only half-revealed." },
+  betelgeuse: { name: "Betelgeuse", lore: "A red supergiant near its death — vast, trembling, already saying farewell." },
+  bellatrix: { name: "Bellatrix", lore: "The Amazon star — hot, blue, and fierce, the warrior's left shoulder." },
+  alnitak: { name: "Alnitak", lore: "Eastern jewel of the belt, beside the flaming Horsehead nebula." },
+  alnilam: { name: "Alnilam", lore: "The central belt star — a string of pearls, blazing across great distance." },
+  mintaka: { name: "Mintaka", lore: "The belt's girdle, sitting almost exactly on the celestial equator." },
+  saiph: { name: "Saiph", lore: "The hunter's right knee — hot and blue, yet quiet in our sky." },
+  rigel: { name: "Rigel", lore: "The hunter's foot — the brightest of Orion, a blue-white beacon." },
+};
+
+export const StarfieldCanvas = ({ reducedMotion, showConstellation, onStarSelect }) => {
   const canvasRef = useRef(null);
   const pointer = useRef({ x: 0, y: 0, tx: 0, ty: 0 });
+  const positions = useRef({});
   const raf = useRef(null);
 
   useEffect(() => {
@@ -133,6 +145,7 @@ export const StarfieldCanvas = ({ reducedMotion, showConstellation }) => {
       for (const key of Object.keys(ORION.stars)) {
         const st = ORION.stars[key];
         const p = pos(key);
+        positions.current[key] = { x: p.x, y: p.y, ...ORION_LORE[key] };
         const r = Math.max(1.3, (3.2 - st.m) * 1.1 + 1.3);
         const tw = reducedMotion ? 0 : Math.sin(t * 0.0015 + st.x * 10) * 0.15;
         // glow
@@ -157,8 +170,40 @@ export const StarfieldCanvas = ({ reducedMotion, showConstellation }) => {
       const cy = (e.clientY / h) * 2 - 1;
       pointer.current.tx = cx;
       pointer.current.ty = cy;
+      // hover cursor near a star
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      let near = false;
+      for (const k of Object.keys(positions.current)) {
+        const p = positions.current[k];
+        if (Math.hypot(mx - p.x, my - p.y) < 24) {
+          near = true;
+          break;
+        }
+      }
+      canvas.style.cursor = near ? "pointer" : "default";
     };
     if (!reducedMotion) window.addEventListener("mousemove", onMove);
+
+    const onClick = (e) => {
+      if (!onStarSelect) return;
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      let best = null;
+      let bestD = 34;
+      for (const k of Object.keys(positions.current)) {
+        const p = positions.current[k];
+        const d = Math.hypot(mx - p.x, my - p.y);
+        if (d < bestD) {
+          bestD = d;
+          best = p;
+        }
+      }
+      if (best) onStarSelect({ name: best.name, lore: best.lore });
+    };
+    canvas.addEventListener("click", onClick);
 
     if (reducedMotion) {
       render(0);
@@ -169,9 +214,10 @@ export const StarfieldCanvas = ({ reducedMotion, showConstellation }) => {
     return () => {
       window.removeEventListener("resize", resize);
       window.removeEventListener("mousemove", onMove);
+      canvas.removeEventListener("click", onClick);
       if (raf.current) cancelAnimationFrame(raf.current);
     };
-  }, [reducedMotion, showConstellation]);
+  }, [reducedMotion, showConstellation, onStarSelect]);
 
   return (
     <canvas

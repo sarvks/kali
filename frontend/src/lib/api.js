@@ -1,5 +1,17 @@
+import Sanscript from "@indic-transliteration/sanscript";
+
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND_URL}/api`;
+
+/** Romanize Devanagari into readable IAST for the transliteration line + TTS. */
+export function transliterate(devanagari) {
+  if (!devanagari) return "";
+  try {
+    return Sanscript.t(devanagari, "devanagari", "iast");
+  } catch (e) {
+    return "";
+  }
+}
 
 const TOKEN_KEY = "kali_session_token";
 
@@ -23,14 +35,36 @@ export function resetToken() {
 }
 
 export async function loadSession(token) {
-  const res = await fetch(`${API}/session/${token}`);
+  const res = await fetch(`${API}/session/${token}`, { credentials: "include" });
   if (!res.ok) return [];
   const data = await res.json();
   return data.messages || [];
 }
 
 export async function clearSession(token) {
-  await fetch(`${API}/session/${token}`, { method: "DELETE" });
+  await fetch(`${API}/session/${token}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+}
+
+export async function ttsGenerate(text) {
+  const res = await fetch(`${API}/tts/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) {
+    let msg = "Her voice could not be summoned.";
+    try {
+      const j = await res.json();
+      msg = j.detail || msg;
+    } catch (e) {}
+    throw new Error(msg);
+  }
+  const data = await res.json();
+  return data.audio;
 }
 
 /**
@@ -41,6 +75,7 @@ export async function streamChat(token, message, { onDelta, onError, signal }) {
   const res = await fetch(`${API}/chat/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify({ token, message }),
     signal,
   });

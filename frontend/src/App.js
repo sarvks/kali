@@ -11,6 +11,7 @@ import { MinimalMenu } from "./components/MinimalMenu";
 import { MahakaliIntroModal } from "./components/MahakaliIntroModal";
 import { AuthModal } from "./components/AuthModal";
 import { ResetPassphraseModal } from "./components/ResetPassphraseModal";
+import { LettersLibrary } from "./components/LettersLibrary";
 import {
   getToken,
   resetToken,
@@ -18,6 +19,8 @@ import {
   clearSession,
   streamChat,
   ttsGenerate,
+  parseReply,
+  transliterate,
 } from "./lib/api";
 import {
   authMe,
@@ -47,6 +50,10 @@ function App() {
   const [audioOn, setAudioOn] = useState(false);
   const [selectedStar, setSelectedStar] = useState(null);
   const [speaking, setSpeaking] = useState(null); // { id, state }
+  const [showLetters, setShowLetters] = useState(false);
+  const [autoplayOn, setAutoplayOn] = useState(
+    () => localStorage.getItem("kali_autoplay") === "1"
+  );
   const [resetToken, setResetToken] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return window.location.pathname.startsWith("/reset")
@@ -58,6 +65,12 @@ function App() {
   const accRef = useRef("");
   const droneRef = useRef(null);
   const ttsRef = useRef(null);
+  const messagesRef = useRef([]);
+  const autoplayedRef = useRef(-1);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   // initial load: check account, else anon thread
   useEffect(() => {
@@ -201,6 +214,34 @@ function App() {
     }
   };
 
+  // Autoplay Verse: speak each new completed verse aloud when enabled
+  useEffect(() => {
+    if (streaming || !autoplayOn) return;
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== "assistant") return;
+    const idx = messages.length - 1;
+    if (autoplayedRef.current >= idx) return;
+    autoplayedRef.current = idx;
+    const p = parseReply(last.content);
+    if (p.guidance) return;
+    const t = `${transliterate(p.sanskrit)}. ${p.english}`;
+    handleSpeak(idx, t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streaming, messages, autoplayOn]);
+
+  const toggleAutoplay = () => {
+    setAutoplayOn((v) => {
+      const nv = !v;
+      localStorage.setItem("kali_autoplay", nv ? "1" : "0");
+      if (nv) autoplayedRef.current = messagesRef.current.length - 1;
+      else stopTts();
+      return nv;
+    });
+    toast(autoplayOn ? "Autoplay silenced." : "Autoplay awakened.", {
+      className: "font-mono-kali",
+    });
+  };
+
   const handleReset = () => {
     abortRef.current?.abort();
     stopTts();
@@ -319,6 +360,9 @@ function App() {
           onSignIn={() => setShowAuth(true)}
           onSignOut={handleSignOut}
           onDeleteAltar={handleDeleteAltar}
+          onOpenLetters={() => setShowLetters(true)}
+          autoplayOn={autoplayOn}
+          onToggleAutoplay={toggleAutoplay}
         />
       </div>
 
@@ -405,6 +449,12 @@ function App() {
         open={!!resetToken}
         token={resetToken}
         onDone={finishReset}
+      />
+      <LettersLibrary
+        open={showLetters}
+        onClose={() => setShowLetters(false)}
+        onSpeak={handleSpeak}
+        speaking={speaking}
       />
       <Toaster
         theme="dark"

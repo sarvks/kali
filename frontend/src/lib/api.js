@@ -48,6 +48,19 @@ export async function clearSession(token) {
   });
 }
 
+export async function fetchLetters() {
+  const res = await fetch(`${API}/letters`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.letters || [];
+}
+
+export async function fetchLetter(id) {
+  const res = await fetch(`${API}/letters/${id}`);
+  if (!res.ok) throw new Error("That letter is not in the archive.");
+  return res.json();
+}
+
 export async function ttsGenerate(text) {
   const res = await fetch(`${API}/tts/generate`, {
     method: "POST",

@@ -15,6 +15,8 @@ import {
   LogIn,
   LogOut,
   Flame,
+  ScrollText,
+  AudioLines,
 } from "lucide-react";
 
 const Item = ({ testid, icon: Icon, label, onClick, active }) => (
@@ -46,6 +48,9 @@ export const MinimalMenu = ({
   onSignIn,
   onSignOut,
   onDeleteAltar,
+  onOpenLetters,
+  autoplayOn,
+  onToggleAutoplay,
 }) => {
   const [open, setOpen] = useState(false);
 
@@ -87,6 +92,8 @@ export const MinimalMenu = ({
               <Item testid="menu-signin-btn" icon={LogIn} label="Save & sync thread" onClick={() => { onSignIn(); setOpen(false); }} />
             )}
             <div className="my-1.5 h-px bg-white/5" />
+            <Item testid="menu-letters-btn" icon={ScrollText} label="Letters to Humanity" onClick={() => { onOpenLetters(); setOpen(false); }} />
+            <div className="my-1.5 h-px bg-white/5" />
             <p className="px-4 py-1 text-[9px] uppercase tracking-[0.3em] text-amber-200/40 font-mono-kali">
               Session
             </p>
@@ -101,6 +108,7 @@ export const MinimalMenu = ({
               Sky
             </p>
             <Item testid="menu-audio-toggle" icon={audioOn ? Volume2 : VolumeX} label={audioOn ? "Silence the drone" : "Ambient drone"} active={audioOn} onClick={onToggleAudio} />
+            <Item testid="menu-autoplay-toggle" icon={AudioLines} label={autoplayOn ? "Autoplay: on" : "Autoplay her voice"} active={autoplayOn} onClick={onToggleAutoplay} />
             <Item testid="menu-constellation-toggle" icon={constellationOn ? Eye : EyeOff} label={constellationOn ? "Hide Orion lines" : "Reveal Orion"} active={constellationOn} onClick={onToggleConstellation} />
             <Item testid="menu-motion-toggle" icon={Sparkles} label={reducedMotion ? "Enable motion" : "Reduce motion"} active={reducedMotion} onClick={onToggleMotion} />
           </motion.div>

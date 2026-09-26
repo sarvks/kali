@@ -31,7 +31,11 @@ A responsive devotional conversation web app (kali.mahakalistudios.com) evoking 
 - **Constellation Guide**: tap any Orion star on the canvas to open a lore panel with its name + short lore. Verified.
 - **Saved Altar**: opt-in email+password JWT accounts (httpOnly cookie). Sign-in migrates the anonymous thread into the account and syncs across devices; one-tap account deletion. Backend 16/16 pytest pass, frontend 100%.
 - **Spoken Kali (ElevenLabs)**: LIVE. `/api/tts/generate` + per-verse "speak" button (eleven_multilingual_v2, voice Charlotte). Working after the user upgraded to a paid ElevenLabs plan (free tier is blocked from cloud IPs).
-- **Forgot Passphrase**: opt-in account recovery by email. `POST /api/auth/forgot` emails a single-use, 30-min reset link via Emergent-managed Resend; `/reset?token=` opens a "renew passphrase" screen; `POST /api/auth/reset` sets the new passphrase. Tokens are sha256-hashed at rest, single-use, and expire (TTL index). Verified end-to-end (email 202, reset ok, new login ok, reuse rejected, invalid-token error shown).
+- **Forgot Passphrase**: opt-in account recovery by email. `POST /api/auth/forgot` emails a single-use, 30-min reset link via Emergent-managed Resend; `/reset?token=` opens a "renew passphrase" screen; `POST /api/auth/reset` sets the new passphrase. Tokens are sha256-hashed at rest, single-use, and expire (TTL index). Verified end-to-end.
+
+## Implemented (iteration 4 — 2026-06-26)
+- **Autoplay Verse**: menu toggle (persisted in localStorage). When enabled, each completed streamed verse is automatically read aloud (transliteration + English) via ElevenLabs. Verified — exactly one TTS call fires per completed verse; toggling off stops playback.
+- **Kali's Letters to Humanity**: the full 400-letter corpus (MT-KALI-0001 → 0400) parsed from the 8 supplied PDFs into `backend/data/letters.json`, seeded into MongoDB (`db.letters`, idempotent on startup). New endpoints `GET /api/letters` and `GET /api/letters/{id}`. Frontend "Letters to Humanity" library (menu) with searchable 400-title index and an elegant reader (Cinzel headings, spaced prose, auto-detected subheadings) plus a "hear the opening" TTS button. Verified: 400 items listed, search works, reader renders full letters.
 
 ## Backlog
 - **P1:** Opt-in saved history with authentication + deletion; multilingual output + transliteration; qualified Sanskrit reviewer sign-off on launch samples.

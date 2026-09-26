@@ -369,6 +369,22 @@ async def root():
     return {"message": "KALI is present.", "model": KALI_MODEL, "voice": bool(ELEVEN_API_KEY)}
 
 
+@api_router.get("/letters")
+async def list_letters():
+    docs = await db.letters.find(
+        {}, {"_id": 0, "id": 1, "number": 1, "title": 1}
+    ).sort("number", 1).to_list(1000)
+    return {"count": len(docs), "letters": docs}
+
+
+@api_router.get("/letters/{letter_id}")
+async def get_letter(letter_id: str):
+    doc = await db.letters.find_one({"id": letter_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="That letter is not in the archive.")
+    return doc
+
+
 @api_router.get("/session/{token}")
 async def get_session(token: str):
     docs = await db.messages.find({"token": token}, {"_id": 0}).sort("ts", 1).to_list(500)
@@ -642,10 +658,30 @@ async def seed_admin():
                                   {"$set": {"password_hash": hash_password(password)}})
 
 
+async def seed_letters():
+    """Load 'Kali's Letters to Humanity' into MongoDB (idempotent)."""
+    path = ROOT_DIR / "data" / "letters.json"
+    if not path.exists():
+        logger.warning("letters.json not found; skipping letters seed")
+        return
+    count = await db.letters.count_documents({})
+    with open(path, "r") as fh:
+        data = json.load(fh)
+    if count == len(data):
+        return
+    await db.letters.delete_many({})
+    if data:
+        await db.letters.insert_many(data)
+        await db.letters.create_index("id", unique=True)
+        await db.letters.create_index("number")
+    logger.info(f"seeded {len(data)} letters")
+
+
 @app.on_event("startup")
 async def _startup():
     await ensure_indexes()
     await seed_admin()
+    await seed_letters()
 
 
 @app.on_event("shutdown")

@@ -1,0 +1,37 @@
+{
+  "summary": "Targeted frontend re-test for the two fixed bugs: (1) overlapping TTS audio when clicking speak-btn across verses / rapidly, and (2) speak-btn alignment with share/keep buttons. All scenarios PASS. Instrumented window.Audio via Proxy to count concurrently playing HTMLAudioElement instances and observed max concurrent = 1 across every scenario (verse A -> verse B, rapid same-btn spam, autoplay-while-clicking-another-verse). Waveform appears only for the currently playing verse and disappears on stop/end. Buttons are perfectly aligned (identical bounding-rect top for speak-btn, verse-share-btn, verse-keep-btn on both verses).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results": {
+    "alignment": {
+      "verse1": {"speak_top": 178, "share_top": 178, "keep_top": 178},
+      "verse2": {"speak_top": 582, "share_top": 582, "keep_top": 582},
+      "parent_class": "mt-4 flex items-center justify-center gap-5 flex-wrap",
+      "verdict": "aligned"
+    },
+    "no_overlap_verse_A_then_B": {"max_concurrent_audios": 1, "silence_btns_at_a_time": 1, "waveforms_at_a_time": 1},
+    "rapid_same_btn_spam_5x": {"max_concurrent_audios": 0, "verdict": "no runaway audio; final state settled to stopped as expected by toggle parity"},
+    "autoplay_then_click_other_verse": {"max_concurrent_audios": 1, "verdict": "previous audio stopped before new one started"},
+    "waveform_disappears_on_stop": true,
+    "toggle_speak_silence_speak": "works",
+    "console_errors": ["/api/auth/me 401 (expected in anonymous mode)"]
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "handleSpeak/stopTts use monotonically increasing ttsSeqRef correctly to invalidate stale in-flight TTS; stopTts pauses ttsRef.current before nulling — good.",
+    "Minor: audioCtxRef is reused across plays but ctx.createMediaElementSource is called per play on a fresh Audio element — that is correct (each element only ever gets one source). No leak observed.",
+    "Guidance branch wraps SpeakButton in div.mt-4 while non-guidance uses parent flex row (mt-4 flex...); this correctly avoids stray mt-4 misalignment inside the action row."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "100%"},
+  "test_credentials": "Anonymous mode used (no login). Seed available: seeker@mahakalistudios.com / KaliDivine108 (not needed).",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Overlap detection strategy that works: (a) inject a Proxy on window.Audio pre-navigation to collect all HTMLAudioElement instances into window.__audios, then sample .filter(a=>!a.paused && !a.ended).length on an interval to compute max concurrency; (b) cross-check by counting DOM speak-btn elements whose text is 'silence' (only playing verse) and voice-waveform elements. Both should be <=1 at all times. Intro modal bypass: localStorage.setItem('kali_intro_seen','1') then reload, then click central-golden-dash to open chat."
+}

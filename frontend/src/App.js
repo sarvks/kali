@@ -241,11 +241,11 @@ function App() {
     setShowAuth(false);
     // migrate the anonymous thread into the account
     try {
-      const msgs = await claimThread(token);
-      setMessages(msgs);
+      const res = await claimThread(token);
+      setMessages(Array.isArray(res) ? res : res?.messages || []);
     } catch (e) {
       const msgs = await loadAuthThread();
-      setMessages(msgs);
+      setMessages(Array.isArray(msgs) ? msgs : []);
     }
     setActivated(true);
     toast("Your altar is lit. This thread now follows you.", {

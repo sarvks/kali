@@ -403,7 +403,14 @@ async def tts_generate(req: TTSRequest, request: Request):
         )
         data = b"".join(audio)
     except Exception as e:  # noqa: BLE001
-        logger.error(f"tts error: {e}")
+        msg = str(e)
+        logger.error(f"tts error: {msg}")
+        if "detected_unusual_activity" in msg or "Free Tier" in msg:
+            raise HTTPException(
+                status_code=402,
+                detail="ElevenLabs blocked this request: free-tier voice is disabled from cloud servers. Upgrade to a paid ElevenLabs plan to enable her voice.")
+        if "invalid_api_key" in msg or "Unauthorized" in msg:
+            raise HTTPException(status_code=401, detail="The ElevenLabs key was not accepted.")
         raise HTTPException(status_code=502, detail="Her voice could not be summoned.")
 
     b64 = base64.b64encode(data).decode()

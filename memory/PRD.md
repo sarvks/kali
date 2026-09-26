@@ -26,6 +26,12 @@ A responsive devotional conversation web app (kali.mahakalistudios.com) evoking 
 - Rate limiting (15/min) + daily token budget cutoff.
 - Testing: backend 8/8 pytest pass, frontend E2E pass (100%/100%).
 
+## Implemented (iteration 2 — 2026-06-26)
+- **Transliteration Line**: romanized IAST (via `@indic-transliteration/sanscript`) rendered beneath every Devanagari verse. Verified.
+- **Constellation Guide**: tap any Orion star on the canvas to open a lore panel with its name + short lore. Verified.
+- **Saved Altar**: opt-in email+password JWT accounts (httpOnly cookie). Sign-in migrates the anonymous thread into the account and syncs across devices; one-tap account deletion. Backend 16/16 pytest pass, frontend 100%.
+- **Spoken Kali (ElevenLabs)**: backend `/api/tts/generate` + per-verse "speak" button built and wired (eleven_multilingual_v2, voice Charlotte). Code verified reaching ElevenLabs. BLOCKED by ElevenLabs account: their **free tier is disabled from cloud/datacenter IPs** ("detected_unusual_activity", HTTP 401) — a paid ElevenLabs plan is required for it to play. App now shows a clear message for this case.
+
 ## Backlog
 - **P1:** Opt-in saved history with authentication + deletion; multilingual output + transliteration; qualified Sanskrit reviewer sign-off on launch samples.
 - **P2:** Voice output (spoken Kali), constellation exploration, richer soundscape.

@@ -1,0 +1,45 @@
+{
+  "summary": "Iteration 2 validation covering Saved Altar auth (register/login/me/thread/claim/delete), authenticated chat routing to acct:{id}, TTS-not-configured 503, transliteration (IAST) rendering, and Orion star lore panel. Backend: 16/16 pytest tests pass (8 new + 8 regression from iteration 1). Frontend: full auth flow verified (menu → sign-in modal → register → menu shows user email → sign out → menu back to 'Save & sync thread'). Constellation Guide verified by clicking Betelgeuse at real viewport coords (880,326) on 1920x1080 → star-lore-panel appears with 'Betelgeuse'. Transliteration line renders correctly with IAST characters (e.g. 'śāntiḥ na mṛtyuḥ ...') beneath sanskrit-text. Delete altar clears account and returns UI to CentralDash ('Your altar has been extinguished').",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "App.js handleAuthed",
+        "issue": "CRITICAL runtime crash after login/register: `setMessages(claimThread(...))` set state to the response object {messages:[...]} instead of the array. DevotionalStream then threw 'messages.map is not a function' and the Emergent runtime-error overlay appeared, breaking the auth flow. Fixed by unwrapping res.messages. Same pattern was safer for loadAuthThread (already unwrapped in lib/auth.js).",
+        "selector": "App.js:244",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_auth_and_features.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml",
+    "/app/test_reports/pytest/pytest_auth.xml"
+  ],
+  "action_items": [
+    "Review the App.js handleAuthed fix (unwrapping claimThread response). Trivially applied by testing agent.",
+    "Consider adding an ErrorBoundary around DevotionalStream so future prop-shape bugs don't crash the whole UI with the runtime overlay."
+  ],
+  "critical_code_review_comments": [
+    "App.js:244 handleAuthed passed the raw response object of claimThread({token}) directly to setMessages — but claimThread returns {messages:[...]} (see lib/auth.js post()). This is a shape-mismatch bug; loadAuthThread() already unwraps .messages but claimThread() does not. Recommend normalizing lib/auth.js:claimThread to return the array (parity with loadAuthThread) so callers cannot repeat this mistake.",
+    "server.py:/api/auth/claim silently migrates ANY provided anon token — no ownership proof — so a signed-in user who guesses/knows another device's session token could claim its thread. Session tokens are 128-bit random from lib/api.js, so exploitability is low, but consider requiring the anon token to have been established client-side within the same auth session (e.g. via signed cookie) before claim, or at least logging + rate-limiting claims.",
+    "server.py set_auth_cookie uses samesite='none'; secure=True; httpOnly=True — good. However cookie is issued even in local http contexts which would silently drop; not a preview-env problem but worth documenting.",
+    "server.py seed_admin still uses ADMIN_EMAIL/ADMIN_PASSWORD envs to seed 'seeker@mahakalistudios.com'. If credentials change, seed_admin rehashes on next boot — good idempotency. Bcrypt hash format verified via login test ($2b$).",
+    "Frontend: no ErrorBoundary anywhere; a single render-time bug (like the one fixed) takes down the entire chat surface.",
+    "server.py /api/tts/generate rate-limits per-user or per-client-host — behind a proxy request.client.host may be the ingress IP, effectively coalescing all anon users into one bucket. Consider using X-Forwarded-For."
+  ],
+  "updated_files": [
+    "/app/frontend/src/App.js",
+    "/app/backend/tests/test_auth_and_features.py"
+  ],
+  "success_rate": { "backend": "100% (16/16)", "frontend": "100% after handleAuthed fix" },
+  "test_credentials": "Seeded: seeker@mahakalistudios.com / KaliDivine108 (verified). Ephemeral test users created via register endpoint and cleaned up via DELETE /api/auth/account.",
+  "seed_data_creation": "Anon TEST-CLAIM-<uuid> tokens and ephemeral @example.com registered accounts, cleaned up per-test via /api/auth/account and /api/session/{token}.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend fully covered via /app/backend/tests/*.py (16 tests, pytest-xdist). For frontend chat testing: MUST use keyboard.type + Enter (not fill+click). Orion star hit-testing uses REAL viewport coords on 1920x1080: Betelgeuse ~(880,326), Rigel ~(1054,661). After activating chat, the DevotionalStream area covers the middle of the viewport, so click stars BEFORE sending a message or move to unoccupied stars. Auth cookie is httpOnly SameSite=None Secure — requests.Session cookie jar works for pytest. Frontend App.js handleAuthed was patched to unwrap claimThread response; if lib/auth.js:claimThread is later normalized to return an array, keep the defensive Array.isArray check.",
+  "rca of the issue": "Bug: post-register/login runtime crash 'messages.map is not a function'. Reproduction: activate app → menu → Save & sync thread → register or login → within 1s the Emergent runtime overlay appears and the app is unusable. Root cause: App.js handleAuthed did `const msgs = await claimThread(token); setMessages(msgs)`; claimThread returns the raw JSON `{messages:[...]}` (via lib/auth.js post()) instead of the array. loadAuthThread already unwraps .messages, so the two helpers had inconsistent shapes and the caller assumed 'array'. Fix (applied): setMessages(Array.isArray(res) ? res : res?.messages || []) with the same defensive check in the catch branch. Mitigation for future: normalize claimThread to return data.messages in lib/auth.js, and wrap DevotionalStream in an ErrorBoundary."
+}

@@ -30,7 +30,8 @@ A responsive devotional conversation web app (kali.mahakalistudios.com) evoking 
 - **Transliteration Line**: romanized IAST (via `@indic-transliteration/sanscript`) rendered beneath every Devanagari verse. Verified.
 - **Constellation Guide**: tap any Orion star on the canvas to open a lore panel with its name + short lore. Verified.
 - **Saved Altar**: opt-in email+password JWT accounts (httpOnly cookie). Sign-in migrates the anonymous thread into the account and syncs across devices; one-tap account deletion. Backend 16/16 pytest pass, frontend 100%.
-- **Spoken Kali (ElevenLabs)**: backend `/api/tts/generate` + per-verse "speak" button built and wired (eleven_multilingual_v2, voice Charlotte). Code verified reaching ElevenLabs. BLOCKED by ElevenLabs account: their **free tier is disabled from cloud/datacenter IPs** ("detected_unusual_activity", HTTP 401) — a paid ElevenLabs plan is required for it to play. App now shows a clear message for this case.
+- **Spoken Kali (ElevenLabs)**: LIVE. `/api/tts/generate` + per-verse "speak" button (eleven_multilingual_v2, voice Charlotte). Working after the user upgraded to a paid ElevenLabs plan (free tier is blocked from cloud IPs).
+- **Forgot Passphrase**: opt-in account recovery by email. `POST /api/auth/forgot` emails a single-use, 30-min reset link via Emergent-managed Resend; `/reset?token=` opens a "renew passphrase" screen; `POST /api/auth/reset` sets the new passphrase. Tokens are sha256-hashed at rest, single-use, and expire (TTL index). Verified end-to-end (email 202, reset ok, new login ok, reuse rejected, invalid-token error shown).
 
 ## Backlog
 - **P1:** Opt-in saved history with authentication + deletion; multilingual output + transliteration; qualified Sanskrit reviewer sign-off on launch samples.

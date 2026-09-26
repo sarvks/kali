@@ -10,6 +10,7 @@ import { InputPanel } from "./components/InputPanel";
 import { MinimalMenu } from "./components/MinimalMenu";
 import { MahakaliIntroModal } from "./components/MahakaliIntroModal";
 import { AuthModal } from "./components/AuthModal";
+import { ResetPassphraseModal } from "./components/ResetPassphraseModal";
 import {
   getToken,
   resetToken,
@@ -46,6 +47,12 @@ function App() {
   const [audioOn, setAudioOn] = useState(false);
   const [selectedStar, setSelectedStar] = useState(null);
   const [speaking, setSpeaking] = useState(null); // { id, state }
+  const [resetToken, setResetToken] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return window.location.pathname.startsWith("/reset")
+      ? params.get("token")
+      : null;
+  });
 
   const abortRef = useRef(null);
   const accRef = useRef("");
@@ -275,6 +282,12 @@ function App() {
 
   const handleStarSelect = useCallback((s) => setSelectedStar(s), []);
 
+  const finishReset = () => {
+    setResetToken(null);
+    window.history.replaceState({}, "", "/");
+    setShowAuth(true);
+  };
+
   return (
     <div
       className={`relative w-full overflow-hidden bg-black text-zinc-100 select-none kali-grain ${
@@ -387,6 +400,11 @@ function App() {
         open={showAuth}
         onClose={() => setShowAuth(false)}
         onAuthed={handleAuthed}
+      />
+      <ResetPassphraseModal
+        open={!!resetToken}
+        token={resetToken}
+        onDone={finishReset}
       />
       <Toaster
         theme="dark"

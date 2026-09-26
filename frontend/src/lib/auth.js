@@ -30,6 +30,9 @@ export const authLogin = (email, password) =>
   post("/auth/login", { email, password });
 export const authLogout = () => post("/auth/logout");
 export const claimThread = (token) => post("/auth/claim", { token });
+export const forgotPassphrase = (email) => post("/auth/forgot", { email });
+export const resetPassphrase = (token, password) =>
+  post("/auth/reset", { token, password });
 
 export async function authMe() {
   const res = await fetch(`${API}/auth/me`, { credentials: "include" });

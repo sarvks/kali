@@ -1,9 +1,16 @@
 import os
 import io
+import re
 import json
 import base64
+import hashlib
+import ipaddress
 import logging
 import secrets
+import httpx
+from html import escape
+from html.parser import HTMLParser
+from urllib.parse import urlparse
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
@@ -40,6 +47,11 @@ JWT_SECRET = os.environ['JWT_SECRET']
 JWT_ALGORITHM = "HS256"
 ELEVEN_API_KEY = os.environ.get('ELEVEN_API_KEY', '')
 ELEVEN_VOICE_ID = os.environ.get('ELEVEN_VOICE_ID', 'XB0fDUnXU5powFXDhCwa')
+
+EMAIL_BASE_URL = "https://integrations.emergentagent.com"
+EMAIL_KEY = os.environ.get('EMERGENT_EMAIL_KEY', '')
+EMAIL_FROM_NAME = os.environ.get('EMAIL_FROM_NAME', 'Mahakali Studios')
+RESET_TOKEN_TTL_MIN = 30
 
 MAX_INPUT_CHARS = 1200
 MAX_OUTPUT_TOKENS = 700
@@ -129,6 +141,15 @@ class ClaimRequest(BaseModel):
     token: str
 
 
+class ForgotRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetRequest(BaseModel):
+    token: str
+    password: str
+
+
 class TTSRequest(BaseModel):
     text: str
 
@@ -188,12 +209,136 @@ def acct_key(user: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Email (Emergent-managed Resend) — guardrail gate + async send
+# ---------------------------------------------------------------------------
+_SHORTENERS = ("bit.ly", "tinyurl.com", "t.co", "is.gd", "cutt.ly", "goo.gl", "rebrand.ly")
+_CRED_ASK = ("reply with your password", "reply with the code", "send your password", "cvv",
+             "send us your password", "enter your password below", "confirm your card number",
+             "your full card number", "seed phrase", "recovery phrase", "verify your card",
+             "social security number", "confirm your bank details")
+_HOSTISH = re.compile(r"\b(?:https?://)?((?:[a-z0-9-]+\.)+[a-z]{2,})", re.I)
+
+
+def _host_ok(host: str) -> bool:
+    if not host or "xn--" in host:
+        return False
+    try:
+        ipaddress.ip_address(host)
+        return False
+    except ValueError:
+        pass
+    return not any(host == s or host.endswith("." + s) for s in _SHORTENERS)
+
+
+def _same_site(shown: str, real: str) -> bool:
+    return shown == real or real.endswith("." + shown) or shown.endswith("." + real)
+
+
+class _EmailScan(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.tags, self.urls, self.anchors = set(), [], []
+        self._href, self._text = None, []
+
+    def handle_starttag(self, tag, attrs):
+        self.tags.add(tag.lower())
+        self.urls += [v for k, v in attrs if k.lower() in ("href", "src") and v]
+        if tag.lower() == "a":
+            self._href = dict((k.lower(), v) for k, v in attrs).get("href")
+            self._text = []
+
+    def handle_data(self, data):
+        if self._href is not None:
+            self._text.append(data)
+
+    def handle_endtag(self, tag):
+        if tag.lower() == "a" and self._href is not None:
+            self.anchors.append((self._href, "".join(self._text)))
+            self._href, self._text = None, []
+
+
+def _assert_safe_email(subject: str, html: str) -> None:
+    scan = _EmailScan()
+    scan.feed(html)
+    if scan.tags & {"form", "input", "textarea", "select"}:
+        raise ValueError("No forms or input fields in email (G2)")
+    body = f"{subject}\n{html}".lower()
+    for p in _CRED_ASK:
+        if p in body:
+            raise ValueError(f"Email asks the recipient for credentials: {p!r} (G2)")
+    for url in scan.urls:
+        low = url.strip().lower()
+        if low.startswith(("mailto:", "tel:", "cid:", "#")):
+            continue
+        if not low.startswith("https://"):
+            raise ValueError(f"Email links/assets must be absolute https: {url!r} (G3)")
+        host = urlparse(low).hostname or ""
+        if not _host_ok(host) or urlparse(low).username is not None:
+            raise ValueError(f"Shortened, numeric-host or credential-bearing URL: {url!r} (G3)")
+    for href, text in scan.anchors:
+        real = urlparse(href.strip().lower()).hostname or ""
+        if not real:
+            continue
+        for m in _HOSTISH.finditer(text):
+            if not _same_site(m.group(1).lower(), real):
+                raise ValueError(f"Anchor text {m.group(1)!r} != real link host {real!r} (G3)")
+
+
+async def send_email(*, to: str, subject: str, html: str) -> Optional[str]:
+    _assert_safe_email(subject, html)
+    payload = {"to": [to], "subject": subject, "html": html, "from_name": EMAIL_FROM_NAME}
+    try:
+        async with httpx.AsyncClient(timeout=30) as http:
+            resp = await http.post(
+                f"{EMAIL_BASE_URL}/api/v1/email/send",
+                headers={"X-Email-Key": EMAIL_KEY},
+                json=payload,
+            )
+        resp.raise_for_status()
+        return resp.json().get("id")
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"email send error: {e}")
+        raise HTTPException(status_code=502, detail="The messenger could not be sent.")
+
+
+def reset_email_html(name: str, link: str) -> str:
+    return (
+        '<table role="presentation" width="100%" style="background:#050505"><tr><td '
+        'style="padding:32px;font-family:Georgia,serif;color:#e8e8e8">'
+        '<div style="max-width:480px;margin:0 auto;background:#0b0b0d;border:1px solid '
+        '#3a2d10;border-radius:14px;padding:32px">'
+        '<p style="font-size:26px;color:#f59e0b;margin:0 0 4px;letter-spacing:2px">काली</p>'
+        '<p style="font-size:11px;letter-spacing:4px;color:#a98b4b;text-transform:uppercase;'
+        'margin:0 0 24px">Mahakali Studios</p>'
+        f'<p style="font-size:15px;line-height:1.7">Namaste {escape(name)},</p>'
+        '<p style="font-size:15px;line-height:1.7;color:#c9c9c9">A request was made to renew '
+        'the passphrase for your Saved Altar. If this was you, follow the light below. It '
+        'fades in 30 minutes.</p>'
+        f'<p style="text-align:center;margin:28px 0"><a href="{escape(link)}" '
+        'style="background:#f59e0b;color:#0b0b0d;text-decoration:none;padding:12px 28px;'
+        'border-radius:999px;font-size:13px;letter-spacing:2px;text-transform:uppercase;'
+        'font-family:Arial,sans-serif">Set a new passphrase</a></p>'
+        '<p style="font-size:12px;line-height:1.6;color:#8a8a8a">If you did not ask for this, '
+        'let it pass — nothing will change and your altar stays as it was.</p>'
+        '<p style="font-size:11px;color:#6b6b6b;margin-top:24px">Sent by Mahakali Studios. '
+        'We never ask for your passphrase by email.</p>'
+        '</div></td></tr></table>'
+    )
+
+
+def hash_reset_token(raw: str) -> str:
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+# ---------------------------------------------------------------------------
 # Rate limiting + budget
 # ---------------------------------------------------------------------------
 async def ensure_indexes():
     await db.abuse_control.create_index("createdAt", expireAfterSeconds=60)
     await db.messages.create_index([("token", 1), ("ts", 1)])
     await db.users.create_index("email", unique=True)
+    await db.password_resets.create_index("expires_at", expireAfterSeconds=0)
+    await db.password_resets.create_index("token_hash")
 
 
 async def check_rate_limit(key: str) -> bool:
@@ -302,6 +447,58 @@ async def claim_thread(req: ClaimRequest, user: dict = Depends(require_user)):
 async def delete_account(response: Response, user: dict = Depends(require_user)):
     await db.messages.delete_many({"token": acct_key(user)})
     await db.users.delete_one({"_id": ObjectId(user["id"])})
+    await db.password_resets.delete_many({"user_id": user["id"]})
+    response.delete_cookie("access_token", path="/")
+    return {"ok": True}
+
+
+@api_router.post("/auth/forgot")
+async def forgot_passphrase(req: ForgotRequest):
+    email = req.email.lower().strip()
+    if not await check_rate_limit(f"forgot:{email}"):
+        raise HTTPException(status_code=429, detail="Too many requests. Rest a moment.")
+    user = await db.users.find_one({"email": email})
+    # Always respond the same way — never reveal whether an altar exists.
+    if user:
+        raw = secrets.token_urlsafe(32)
+        await db.password_resets.delete_many({"user_id": str(user["_id"])})
+        await db.password_resets.insert_one({
+            "user_id": str(user["_id"]),
+            "email": email,
+            "token_hash": hash_reset_token(raw),
+            "expires_at": datetime.now(timezone.utc) + timedelta(minutes=RESET_TOKEN_TTL_MIN),
+            "used": False,
+            "created_at": datetime.now(timezone.utc),
+        })
+        link = f"{FRONTEND_URL}/reset?token={raw}"
+        try:
+            await send_email(
+                to=email,
+                subject="Renew your KALI passphrase",
+                html=reset_email_html(user.get("name", email.split("@")[0]), link),
+            )
+        except HTTPException:
+            pass  # do not leak send failure to the caller
+    return {"ok": True, "message": "If an altar exists for that email, a link has been sent."}
+
+
+@api_router.post("/auth/reset")
+async def reset_passphrase(req: ResetRequest, response: Response):
+    if len(req.password) < 6:
+        raise HTTPException(status_code=400, detail="Passphrase must be at least 6 characters.")
+    rec = await db.password_resets.find_one({"token_hash": hash_reset_token(req.token)})
+    if not rec or rec.get("used"):
+        raise HTTPException(status_code=400, detail="This link is invalid or has already been used.")
+    expires = rec["expires_at"]
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    if expires < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="This link has faded. Request a new one.")
+    await db.users.update_one(
+        {"_id": ObjectId(rec["user_id"])},
+        {"$set": {"password_hash": hash_password(req.password)}})
+    await db.password_resets.update_one({"_id": rec["_id"]}, {"$set": {"used": True}})
+    await db.password_resets.delete_many({"user_id": rec["user_id"], "used": False})
     response.delete_cookie("access_token", path="/")
     return {"ok": True}
 

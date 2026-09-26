@@ -62,6 +62,11 @@ A responsive devotional conversation web app (kali.mahakalistudios.com) evoking 
 - **Streak Milestones**: reaching a 7- or 30-day reading streak shows a golden celebration modal ("✦"/"✦✦") offering a rare letter (MT-KALI-0108 / MT-KALI-0400); the streak badge gains a ✦ mark. Once-only via localStorage. Verified 7-day modal.
 - **Weekly Digest**: reminder settings now offer Daily or Weekly (with weekday); weekly sends one email listing the week's 7 letters. Cron honors per-user freq/weekday/hour/timezone (weekly idempotent within 6 days). Verified weekly send.
 
+## Bug fixes (2026-06-XX — fork)
+- **CORS regression (root cause of two reported bugs)**: backend `CORSMiddleware` allowed only `allow_origins=[FRONTEND_URL]`, so requests from the deployed `*.mahakalistudios.com` domain got no `access-control-allow-origin` header → browser blocked `/api/chat/stream` ("The connection wavered") and `/api/letters` (Letters library appeared empty / would not open). Fixed by adding `allow_origin_regex=r"https://([a-z0-9-]+\.)*(emergentagent\.com|mahakalistudios\.com)"` (server.py ~L886). Verified via curl + pytest: cross-origin GET/OPTIONS now echo the origin with credentials. (Preview is same-origin so it was never affected there.)
+- **Orion lines removed**: deleted the inter-star line-drawing block in `StarfieldCanvas.js` (individual Orion stars + central golden dash remain). Removed the now-dead "Reveal Orion / Hide Orion lines" toggle from `MinimalMenu.js`.
+- Testing: `/app/test_reports/iteration_3.json` — frontend 100%, backend fixes 100%.
+
 ## Backlog
 - **P1:** Opt-in saved history with authentication + deletion; multilingual output + transliteration; qualified Sanskrit reviewer sign-off on launch samples.
 - **P2:** Voice output (spoken Kali), constellation exploration, richer soundscape.

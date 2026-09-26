@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, MailPlus } from "lucide-react";
+import { fetchWeeklyDigest } from "../lib/api";
 
 const fmtHour = (h) => {
   const period = h < 12 ? "AM" : "PM";
@@ -16,7 +17,17 @@ export const ReminderModal = ({ open, onClose, initialEnabled, initialHour, init
   const [freq, setFreq] = useState(initialFreq || "daily");
   const [weekday, setWeekday] = useState(initialWeekday ?? 0);
   const [busy, setBusy] = useState(false);
+  const [digest, setDigest] = useState([]);
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
+  useEffect(() => {
+    if (open && freq === "weekly") {
+      fetchWeeklyDigest(weekday, tz)
+        .then((d) => setDigest(d.letters || []))
+        .catch(() => setDigest([]));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, freq, weekday]);
 
   const save = async () => {
     setBusy(true);
@@ -110,6 +121,28 @@ export const ReminderModal = ({ open, onClose, initialEnabled, initialHour, init
                       <option key={i} value={i}>{d}</option>
                     ))}
                   </select>
+                  {digest.length > 0 && (
+                    <div
+                      data-testid="digest-preview"
+                      className="mb-4 rounded-lg border border-amber-500/15 bg-white/5 p-3"
+                    >
+                      <p className="text-[10px] uppercase tracking-[0.25em] text-amber-200/50 font-mono-kali mb-2">
+                        The seven you'll receive
+                      </p>
+                      <ol className="space-y-1.5">
+                        {digest.map((l, i) => (
+                          <li
+                            key={l.id}
+                            data-testid="digest-preview-item"
+                            className="text-[11px] text-zinc-300 font-mono-kali flex gap-2"
+                          >
+                            <span className="text-amber-400/60 shrink-0">{i + 1}.</span>
+                            <span className="truncate">{l.title}</span>
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  )}
                 </>
               )}
               <p className="text-[10px] uppercase tracking-[0.25em] text-amber-200/50 font-mono-kali mb-2">

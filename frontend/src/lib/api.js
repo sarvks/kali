@@ -67,6 +67,32 @@ export async function fetchDailyLetter() {
   return res.json();
 }
 
+export async function fetchWeeklyDigest(weekday, tz) {
+  const qs = new URLSearchParams();
+  if (weekday != null) qs.set("weekday", String(weekday));
+  if (tz) qs.set("tz", tz);
+  const res = await fetch(`${API}/letters/weekly-digest?${qs.toString()}`);
+  if (!res.ok) return { letters: [] };
+  return res.json();
+}
+
+export async function giftLetter({ letterId, toEmail, fromName, note }) {
+  const res = await fetch(`${API}/letters/gift`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ letter_id: letterId, to_email: toEmail, from_name: fromName, note }),
+  });
+  if (!res.ok) {
+    let msg = "The letter could not be sent.";
+    try {
+      const j = await res.json();
+      msg = j.detail || msg;
+    } catch (e) {}
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
 export async function ttsGenerate(text) {
   const res = await fetch(`${API}/tts/generate`, {
     method: "POST",

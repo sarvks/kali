@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { Volume2, Loader2, Square } from "lucide-react";
 import { parseReply, transliterate } from "../lib/api";
+import { VoiceWaveform } from "./VoiceWaveform";
 
 const SpeakButton = ({ onSpeak, state }) => {
   if (!onSpeak) return null;
@@ -24,7 +25,7 @@ const SpeakButton = ({ onSpeak, state }) => {
   );
 };
 
-const Utterance = ({ sanskrit, english, guidance, onSpeak, speakState, onKeep, onShare }) => {
+const Utterance = ({ sanskrit, english, guidance, onSpeak, speakState, onKeep, onShare, analyser }) => {
   const iast = sanskrit ? transliterate(sanskrit) : "";
   if (guidance) {
     return (
@@ -39,6 +40,7 @@ const Utterance = ({ sanskrit, english, guidance, onSpeak, speakState, onKeep, o
           {english}
         </p>
         <SpeakButton onSpeak={onSpeak} state={speakState} />
+        {speakState === "playing" && analyser && <VoiceWaveform analyser={analyser} />}
       </div>
     );
   }
@@ -93,6 +95,7 @@ const Utterance = ({ sanskrit, english, guidance, onSpeak, speakState, onKeep, o
           </button>
         )}
       </div>
+      {speakState === "playing" && analyser && <VoiceWaveform analyser={analyser} />}
     </div>
   );
 };
@@ -105,6 +108,7 @@ export const DevotionalStream = ({
   speaking,
   onKeep,
   onShare,
+  speakingAnalyser,
 }) => {
   const endRef = useRef(null);
 
@@ -143,6 +147,7 @@ export const DevotionalStream = ({
               {...parsed}
               onSpeak={onSpeak ? () => onSpeak(i, speakText) : null}
               speakState={speaking?.id === i ? speaking.state : "idle"}
+              analyser={speaking?.id === i && speaking.state === "playing" ? speakingAnalyser : null}
               onKeep={!parsed.guidance && onKeep ? () => onKeep(parsed) : null}
               onShare={!parsed.guidance && onShare ? () => onShare(parsed) : null}
             />

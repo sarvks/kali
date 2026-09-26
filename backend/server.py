@@ -170,6 +170,13 @@ class TTSRequest(BaseModel):
     text: str
 
 
+class GiftRequest(BaseModel):
+    letter_id: str
+    to_email: EmailStr
+    from_name: Optional[str] = None
+    note: Optional[str] = None
+
+
 # ---------------------------------------------------------------------------
 # Auth helpers
 # ---------------------------------------------------------------------------
@@ -404,6 +411,84 @@ async def daily_letter():
     num = (ordinal % count) + 1
     doc = await db.letters.find_one({"number": num}, {"_id": 0})
     return doc
+
+
+def gift_letter_email_html(letter: dict, from_name: str, note: str, link: str) -> str:
+    body = (letter.get("body") or "").replace("Beloved humanity,", "").strip()
+    excerpt = escape(body[:420].rsplit(" ", 1)[0]) + "…" if body else ""
+    note_block = ""
+    if from_name or note:
+        who = escape(from_name) if from_name else "Someone"
+        note_html = f'<p style="font-size:14px;line-height:1.7;color:#d8c9a6;font-style:italic;margin:0 0 6px">“{escape(note)}”</p>' if note else ""
+        note_block = (
+            '<div style="border-left:2px solid #3a2d10;padding:2px 0 2px 16px;margin:0 0 22px">'
+            f'{note_html}'
+            f'<p style="font-size:12px;color:#a98b4b;margin:0">— {who} sent you this letter</p>'
+            '</div>'
+        )
+    return (
+        '<table role="presentation" width="100%" style="background:#050505"><tr><td '
+        'style="padding:32px;font-family:Georgia,serif;color:#e8e8e8">'
+        '<div style="max-width:520px;margin:0 auto;background:#0b0b0d;border:1px solid '
+        '#3a2d10;border-radius:14px;padding:32px">'
+        '<p style="font-size:26px;color:#f59e0b;margin:0 0 4px;letter-spacing:2px">काली</p>'
+        '<p style="font-size:11px;letter-spacing:4px;color:#a98b4b;text-transform:uppercase;'
+        'margin:0 0 24px">A Letter to Humanity</p>'
+        f'{note_block}'
+        f'<h1 style="font-size:22px;color:#fbbf24;line-height:1.35;margin:0 0 16px;'
+        f'font-family:Georgia,serif">{escape(letter.get("title",""))}</h1>'
+        f'<p style="font-size:15px;line-height:1.85;color:#c9c9c9;margin:0 0 24px">{excerpt}</p>'
+        f'<p style="text-align:center;margin:26px 0"><a href="{escape(link)}" '
+        'style="background:#f59e0b;color:#0b0b0d;text-decoration:none;padding:12px 28px;'
+        'border-radius:999px;font-size:13px;letter-spacing:2px;text-transform:uppercase;'
+        'font-family:Arial,sans-serif">Read the full letter</a></p>'
+        '<p style="text-align:center;font-size:20px;color:#f59e0b;margin:22px 0 0">॥ ॐ ॥</p>'
+        '<p style="font-size:11px;color:#6b6b6b;margin-top:24px">Sent through KALI by Mahakali '
+        'Studios at a friend\u2019s request. We never ask for your passphrase by email.</p>'
+        '</div></td></tr></table>'
+    )
+
+
+@api_router.get("/letters/weekly-digest")
+async def weekly_digest_preview(weekday: Optional[int] = None, tz: Optional[str] = None):
+    count = await db.letters.count_documents({})
+    if not count:
+        raise HTTPException(status_code=404, detail="The archive is empty.")
+    try:
+        now_local = datetime.now(timezone.utc).astimezone(ZoneInfo(tz)) if tz else datetime.now(timezone.utc)
+    except Exception:
+        now_local = datetime.now(timezone.utc)
+    start = now_local.date()
+    if weekday is not None:
+        start = start + timedelta(days=(int(weekday) - start.weekday()) % 7)
+    letters = []
+    for i in range(7):
+        d = start + timedelta(days=i)
+        num = (d.toordinal() % count) + 1
+        lt = await db.letters.find_one({"number": num}, {"_id": 0, "id": 1, "number": 1, "title": 1})
+        if lt:
+            letters.append(lt)
+    return {"start_date": start.isoformat(), "letters": letters}
+
+
+@api_router.post("/letters/gift")
+async def gift_letter(req: GiftRequest, request: Request):
+    ip = request.client.host if request.client else "?"
+    if not await check_rate_limit(f"gift:{ip}"):
+        raise HTTPException(status_code=429, detail="Too many gifts sent. Rest a moment.")
+    letter = await db.letters.find_one({"id": req.letter_id}, {"_id": 0})
+    if not letter:
+        raise HTTPException(status_code=404, detail="That letter is not in the archive.")
+    from_name = (req.from_name or "").strip()[:60]
+    note = (req.note or "").strip()[:500]
+    link = f"{FRONTEND_URL}/?letter={letter['id']}"
+    subject = f"A letter from Kali — {letter['title']}"
+    try:
+        await send_email(to=req.to_email, subject=subject,
+                         html=gift_letter_email_html(letter, from_name, note, link))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Please simplify your note and try again.")
+    return {"ok": True, "message": "Your letter has been sent."}
 
 
 @api_router.get("/letters/{letter_id}")

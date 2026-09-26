@@ -85,6 +85,24 @@ body {
     animation: none !important;
 }
 
+/* streak milestone badge twinkle */
+@keyframes milestoneTwinkle {
+    0%, 100% {
+        opacity: 0.75;
+        text-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+    }
+    50% {
+        opacity: 1;
+        text-shadow: 0 0 16px rgba(245, 158, 11, 0.9);
+    }
+}
+.milestone-twinkle {
+    animation: milestoneTwinkle 3.2s ease-in-out infinite;
+}
+.reduce-motion .milestone-twinkle {
+    animation: none !important;
+}
+
 /* caret */
 @keyframes caretBlink {
     0%,

@@ -16,9 +16,11 @@ import {
   Share2,
   Wand2,
   Flame,
+  Gift,
 } from "lucide-react";
 import { fetchLetters, fetchLetter, fetchDailyLetter, ttsGenerate } from "../lib/api";
 import { ShareCardModal } from "./ShareCardModal";
+import { GiftLetterModal } from "./GiftLetterModal";
 
 function chunkText(text, size = 620) {
   const paras = text.split("\n\n");
@@ -68,6 +70,7 @@ export const LettersLibrary = ({
   const [loadingLetter, setLoadingLetter] = useState(false);
   const [player, setPlayer] = useState({ state: "idle", mode: null, index: 0, total: 0 });
   const [shareOpen, setShareOpen] = useState(false);
+  const [giftOpen, setGiftOpen] = useState(false);
   const [streak, setStreak] = useState(() => {
     try {
       const s = JSON.parse(localStorage.getItem("kali_streak") || "null");
@@ -502,6 +505,14 @@ export const LettersLibrary = ({
                         <Share2 size={13} /> share
                       </button>
                     </div>
+
+                    <button
+                      data-testid="letter-gift-btn"
+                      onClick={() => setGiftOpen(true)}
+                      className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.25em] font-mono-kali text-zinc-500 hover:text-amber-300 transition-colors"
+                    >
+                      <Gift size={13} /> gift to a friend
+                    </button>
                   </div>
 
                   <div className="space-y-5">
@@ -536,6 +547,11 @@ export const LettersLibrary = ({
             onClose={() => setShareOpen(false)}
             kind="letter"
             payload={selected}
+          />
+          <GiftLetterModal
+            open={giftOpen && !!selected}
+            onClose={() => setGiftOpen(false)}
+            letter={selected}
           />
         </motion.div>
       )}

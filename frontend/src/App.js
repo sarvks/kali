@@ -71,6 +71,13 @@ function App() {
   const [showBlessings, setShowBlessings] = useState(false);
   const [shareVerse, setShareVerse] = useState(null);
   const [milestone, setMilestone] = useState(null);
+  const [milestonesEarned, setMilestonesEarned] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("kali_milestones") || "[]");
+    } catch (e) {
+      return [];
+    }
+  });
   const [continueReading, setContinueReading] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("kali_reading") || "null");
@@ -92,6 +99,8 @@ function App() {
   const accRef = useRef("");
   const droneRef = useRef(null);
   const ttsRef = useRef(null);
+  const audioCtxRef = useRef(null);
+  const analyserRef = useRef(null);
   const messagesRef = useRef([]);
   const autoplayedRef = useRef(-1);
 
@@ -248,8 +257,32 @@ function App() {
       const dataUrl = await ttsGenerate(text);
       const audio = new Audio(dataUrl);
       ttsRef.current = audio;
-      audio.onended = () => setSpeaking(null);
-      audio.onerror = () => setSpeaking(null);
+      // Route through an AnalyserNode so the waveform can ripple with her voice.
+      try {
+        if (!audioCtxRef.current) {
+          const Ctx = window.AudioContext || window.webkitAudioContext;
+          audioCtxRef.current = new Ctx();
+        }
+        const ctx = audioCtxRef.current;
+        if (ctx.state === "suspended") await ctx.resume();
+        const src = ctx.createMediaElementSource(audio);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 64;
+        analyser.smoothingTimeConstant = 0.75;
+        src.connect(analyser);
+        analyser.connect(ctx.destination);
+        analyserRef.current = analyser;
+      } catch (e) {
+        analyserRef.current = null;
+      }
+      audio.onended = () => {
+        analyserRef.current = null;
+        setSpeaking(null);
+      };
+      audio.onerror = () => {
+        analyserRef.current = null;
+        setSpeaking(null);
+      };
       await audio.play();
       setSpeaking({ id, state: "playing" });
     } catch (e) {
@@ -427,7 +460,12 @@ function App() {
     setShareVerse({ sanskrit: parsed.sanskrit || "", english: parsed.english || "" });
   };
 
-  const handleMilestone = (count) => setMilestone(count);
+  const handleMilestone = (count) => {
+    setMilestone(count);
+    try {
+      setMilestonesEarned(JSON.parse(localStorage.getItem("kali_milestones") || "[]"));
+    } catch (e) {}
+  };
 
   const openRareLetter = () => {
     const rareId = milestone >= 30 ? "MT-KALI-0400" : "MT-KALI-0108";
@@ -519,6 +557,24 @@ function App() {
         <p className="font-cinzel text-sm text-amber-300/80 font-devanagari">काली</p>
       </div>
 
+      {/* Streak milestone badge — a small permanent golden mark in the sky */}
+      {milestonesEarned.length > 0 && (
+        <div
+          data-testid="milestone-badge"
+          className="absolute z-30 top-[14%] left-1/2 -translate-x-1/2 flex items-center gap-3 pointer-events-none"
+        >
+          {[...milestonesEarned].sort((a, b) => a - b).map((m) => (
+            <span
+              key={m}
+              title={`${m}-day devotion earned`}
+              className="pointer-events-auto text-amber-300/90 text-lg leading-none drop-shadow-[0_0_10px_rgba(245,158,11,0.75)] milestone-twinkle cursor-default"
+            >
+              {m >= 30 ? "✦✦" : "✦"}
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* Star lore panel */}
       <AnimatePresence>
         {selectedStar && (
@@ -599,6 +655,7 @@ function App() {
                 streamText={streamText}
                 onSpeak={handleSpeak}
                 speaking={speaking}
+                speakingAnalyser={analyserRef.current}
                 onKeep={handleKeepVerse}
                 onShare={handleShareVerse}
               />

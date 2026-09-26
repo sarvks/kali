@@ -116,7 +116,6 @@ export const MinimalMenu = ({
             </p>
             <Item testid="menu-audio-toggle" icon={audioOn ? Volume2 : VolumeX} label={audioOn ? "Silence the drone" : "Ambient drone"} active={audioOn} onClick={onToggleAudio} />
             <Item testid="menu-autoplay-toggle" icon={AudioLines} label={autoplayOn ? "Autoplay: on" : "Autoplay her voice"} active={autoplayOn} onClick={onToggleAutoplay} />
-            <Item testid="menu-constellation-toggle" icon={constellationOn ? Eye : EyeOff} label={constellationOn ? "Hide Orion lines" : "Reveal Orion"} active={constellationOn} onClick={onToggleConstellation} />
             <Item testid="menu-motion-toggle" icon={Sparkles} label={reducedMotion ? "Enable motion" : "Reduce motion"} active={reducedMotion} onClick={onToggleMotion} />
           </motion.div>
         )}

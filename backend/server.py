@@ -886,6 +886,7 @@ app.include_router(api_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[FRONTEND_URL],
+    allow_origin_regex=r"https://([a-z0-9-]+\.)*(emergentagent\.com|mahakalistudios\.com)",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -174,19 +174,6 @@ export const StarfieldCanvas = ({ reducedMotion, showConstellation, onStarSelect
         y: oy + ORION.stars[k].y * size + py,
       });
 
-      if (showConstellation) {
-        ctx.strokeStyle = "rgba(245,158,11,0.28)";
-        ctx.lineWidth = 1;
-        for (const [a, b] of ORION.lines) {
-          const pa = pos(a);
-          const pb = pos(b);
-          ctx.beginPath();
-          ctx.moveTo(pa.x, pa.y);
-          ctx.lineTo(pb.x, pb.y);
-          ctx.stroke();
-        }
-      }
-
       for (const key of Object.keys(ORION.stars)) {
         const st = ORION.stars[key];
         const p = pos(key);
